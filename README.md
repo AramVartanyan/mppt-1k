@@ -103,19 +103,22 @@ thermistors, LCD and buttons fitted.
   - `esp32-ads1115` (Molorius) — will be ported to `i2c_master`, `QueueHandle_t`, and given a
     `CMakeLists.txt`.
   - `container_nvs` — blob storage wrapper over `nvs_flash`, used for all settings.
+  - `captive-wifi` (new, MIT) — Wi-Fi station management with captive-portal fallback,
+    replaces `app_wifi` from the HomeKit SDK. See 2.6.
 - Managed components (`main/idf_component.yml`):
   - `espressif/ntc_driver` — NTC on the on-chip ADC (TH2).
   - `esp-idf-lib/hd44780` — HD44780 driver used standalone with a project-supplied PCF8574
     write callback over `i2c_master` (no `i2cdev`/`pcf8574` dependencies).
 - External components expected in the build tree but **not** part of this repository
   (`components/*.txt` point to them): `esp-homekit-sdk` (`homekit`), `button` (`iot_button`),
-  `outputwrite`, `fupdateota`, `app_wifi`, `app_hap_setup_payload`, `qrcode`.
+  `outputwrite`, `fupdateota`, `app_hap_setup_payload`, `qrcode`, `mdns` (registry; required
+  by HomeKit and reused by `captive-wifi`).
 
 ### 2.2 Source layout (`project/mppt-hap/main`)
 
 | File | Responsibility | FUGU origin |
 |---|---|---|
-| `app_main.c` | boot, safe outputs first, NVS, tasks, HAP start if enabled, IO0 reset button | `setup()` |
+| `app_main.c` | boot, safe outputs first, NVS, tasks, Wi-Fi / HAP start if enabled, IO0 reset button, OTA | `setup()` |
 | `mppt_config.h` | pins and constants from Kconfig | `#define`s |
 | `mppt_state.h` | shared measurement/state struct + mutex | globals |
 | `mppt_hal.c/.h` | I2C buses, ADS1115, LCD callback, LEDC PWM, GPIO, NTC ADC | Arduino calls |
@@ -125,6 +128,7 @@ thermistors, LCD and buttons fitted.
 | `mppt_lcd.c/.h` | display pages and 3-button menu | `8_LCD_Menu.ino` |
 | `mppt_telemetry.c/.h` | periodic log line (`ESP_LOGI`) | `6_Onboard_Telemetry.ino` |
 | `mppt_hap.c/.h` | HomeKit services, started only when enabled | replaces `7_Wireless_Telemetry.ino` (Blynk) |
+| `project/common/captive-wifi` | Wi-Fi STA + captive portal component (2.6) | `setupWiFi()` |
 
 ### 2.3 Tasks (single core)
 
@@ -172,7 +176,37 @@ firmware info strings (replaced by `CONFIG_APP_PROJECT_VER`), the Light Sensor s
 HomeKit template.
 
 New relative to FUGU: 12 V rail power-good input (PWR12) checked before enabling the gate
-driver, HomeKit, single-firmware HAP on/off from the menu, OTA update via `fupdateota`.
+driver, HomeKit, Wi-Fi captive portal, single-firmware Wi-Fi / HAP on/off from the menu, OTA
+update via `fupdateota` (automatic check 1 min after Wi-Fi connects, and on demand from the
+menu).
+
+### 2.6 `captive-wifi` component
+
+Own component in `project/common/captive-wifi`, MIT, written against ESP-IDF 5.5 APIs. It
+follows the idea of tonyp7/esp32-wifi-manager and the structure of the official
+`examples/protocols/http_server/captive_portal` example; it keeps the `app_wifi` interface
+that the HomeKit code already uses (`app_wifi_init`, `app_wifi_start`, `TakeStatusConnected`
+callback) so `mppt_hap` needs no changes. Target size: 500–600 lines of C plus ~6 KB embedded
+HTML, no dependencies beyond `esp_wifi`, `esp_netif`, `esp_http_server`, `lwip`, `nvs_flash`
+and `mdns`.
+
+Behaviour:
+
+1. Start (only when the Wi-Fi setting is on): if credentials exist in NVS → STA, connect with
+   retries; on success → mDNS, HAP (if enabled), `TakeStatusConnected(true)`.
+2. No credentials, or N failed attempts → SoftAP `MPPT-xxxxxx` (open or with a fixed
+   password, Kconfig) with captive portal: DNS catch-all + DHCP option 114, so the sign-in page
+   opens automatically on iOS, Android and Windows.
+3. Portal page: scanned networks with signal strength, password field, connect button,
+   status. HTTP endpoints `/`, `/scan`, `/connect`, `/status`.
+4. Credentials saved through `container_nvs`; the device switches to STA (reboot only if
+   needed).
+5. LCD shows the AP name and `192.168.4.1` while the portal is active, and IP + RSSI when
+   connected.
+6. "Reset WiFi" (menu, or IO0 held 3 s) erases credentials and returns to the portal.
+
+Later (phase 5) the same HTTP server serves a status page with all measurements when the
+device is connected to the home network, which is why Wi-Fi is a setting separate from HAP.
 
 ---
 
@@ -192,7 +226,8 @@ driver, HomeKit, single-firmware HAP on/off from the menu, OTA update via `fupda
 | Fan enabled | on | on/off | menu, HomeKit Fan |
 | Fan on temperature | 60 °C | 0–100 °C | menu |
 | Shutdown temperature | 90 °C | 0–120 °C | menu |
-| HAP (HomeKit + Wi-Fi) enabled | off | on/off, change → confirm → reboot | menu |
+| Wi-Fi enabled | off | on/off; hidden in the menu while HAP is on (HAP keeps Wi-Fi on) | menu |
+| HAP (HomeKit) enabled | off | on/off, requires Wi-Fi (turns it on); change → confirm → reboot | menu |
 | LCD backlight | on | on/off | menu, HomeKit custom "Display" |
 | LCD backlight sleep | never | never / 10 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
 | Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu |
@@ -256,9 +291,12 @@ numbered list menu.
 
 | Context | UP | DOWN | MENU short | MENU long (2 s) |
 |---|---|---|---|---|
-| Display pages | previous page | next page | open menu | — |
-| Menu list | previous item | next item | select item | exit (same as "Exit") |
+| Display pages | previous page | next page | open menu | — (10 s: factory reset, see below) |
+| Menu list | scroll up | scroll down | select item | exit (same as "Exit") |
 | Value editing | value + (hold = auto-repeat) | value − (hold = auto-repeat) | confirm and save | cancel edit |
+
+The two LCD lines show two consecutive menu items with a marker on the active one; DOWN scrolls
+to items 3–4, UP back to 1–2.
 
 Rules:
 
@@ -267,15 +305,26 @@ Rules:
 - 7 s without a key press at any level returns to the display pages; an unconfirmed edit is
   discarded.
 - MENU long press is free in this scheme (FUGU used long Select only to enter settings), so it
-  is mapped to Exit/Cancel.
+  is mapped to Exit/Cancel at 2 s.
+- MENU held for more than 10 s triggers Factory Reset (after 2 s the display shows "hold for
+  factory reset" with a countdown; releasing earlier only exits).
 
 Display pages (from FUGU): 1 power + energy + SOC + Vout + Iout; 2 input and output V/A;
 3 energy + SOC bar graph; 4 temperature + fan; 5 energy savings (kWh × price).
 
-Menu items: FUGU's 12 settings (charging mode, output mode, battery max/min, charging
-current, fan, fan temperature, shutdown temperature, backlight sleep, counter reset,
-factory reset, save/autoload) plus battery preset, energy price, HAP on/off (with reboot
-confirmation), Wi-Fi reset, firmware version / HAP pairing state.
+Menu items: FUGU's settings (charging mode, output mode, battery max/min, charging current,
+fan, fan temperature, shutdown temperature, backlight sleep, counter reset, save/autoload) plus
+battery preset and energy price, and a **Device Setup** sub-menu:
+
+| # | Item | Behaviour |
+|---|---|---|
+| 1 | Enable HAP / Disable HAP | label reflects the current state; turning on also turns Wi-Fi on; confirm → reboot |
+| 2 | Enable WiFi / Disable WiFi | shown only while HAP is off |
+| 3 | FW Update | checks `otafw` for a newer version and installs it; progress on the LCD |
+| 4 | Reset WiFi | erases credentials, restarts the captive portal |
+| 5 | Factory Reset | confirm → erase settings, counters, Wi-Fi and HAP pairing → reboot |
+| 6 | Info | firmware version, IP, RSSI, HAP pairing state |
+| 7 | Exit | back to the main menu |
 
 ---
 
@@ -298,7 +347,7 @@ With battery preset "None" the Battery service reports **100 %** and "not charge
 Home app does not raise low-battery warnings.
 
 HAP pairing reset: IO0 held 3 s resets Wi-Fi credentials, 10 s resets to factory; both also
-available from the LCD menu.
+available from the Device Setup menu, and factory reset also via MENU held 10 s.
 
 ---
 
@@ -307,8 +356,12 @@ available from the LCD menu.
 Project code name (CMake project and binary name): **`mppt1hs2`**.
 
 `partitions_hap.csv`: 4 MB flash, `sec_cert`, `nvs`, `otadata`, `phy_init`, `ota_0` / `ota_1`
-(1600 KB each), `factory_nvs`, `nvs_keys`. OTA through `fupdateota`, URL
-`https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin`.
+(1600 KB each), `factory_nvs`, `nvs_keys`.
+
+OTA through `fupdateota`, URL `https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin`.
+The firmware version comes from `version.txt` → `PROJECT_VER` → app descriptor, which is also
+what HomeKit reports as Firmware Revision and what the OTA version check compares. An automatic
+check runs 1 minute after Wi-Fi connects; a manual check/update is in Device Setup → FW Update.
 
 ---
 
@@ -322,9 +375,10 @@ Each phase is reviewed and approved before the next starts.
    telemetry. Tested from USB power without the power stage.
 3. **Control** — `mppt_control`: protection and charging algorithm. First tests with a
    laboratory PSU instead of a panel, then PV.
-4. **HomeKit** — `mppt_hap`, replacement of the template callbacks.
-5. **Extras** — TH2 redundancy, Wh persistence tuning, Eve characteristics,
-   dynamic fan PWM (3-pin fan, "coming soon" in FUGU).
+4. **Connectivity** — `captive-wifi` component, Device Setup menu, OTA check; then
+   `mppt_hap` and replacement of the template callbacks.
+5. **Extras** — web status page on the device IP, TH2 redundancy, Wh persistence tuning, Eve
+   characteristics.
 
 ---
 

@@ -54,7 +54,12 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | TXD0 / RXD0 | | UART0 | console / telemetry, T6 header |
 | IO19 / IO20 | | USB D- / D+ | native USB (console optional) |
 
-There is no status LED GPIO. D3 is a hardware indicator on the backflow gate supply.
+There is no status LED on the MPPT32 v1.1 board (D3 is a hardware indicator on the backflow
+gate supply). The firmware drives the `led_indicator` engine from `outputwrite` anyway (Wi-Fi
+state as steady base, HAP identify, OTA blink, reset patterns, over-temperature); the GPIO is
+`CONFIG_LED_GPIO` and defaults to IO2, which is unconnected on the module, so an external LED
+can be wired to it. GPIO configuration goes through `outputwrite` (`ioInit`, `OutputWrite`,
+`ReadInput`).
 
 ### 1.2 Analog channels (ADS1115)
 
@@ -194,8 +199,8 @@ Behaviour:
 
 1. Start (only when the Wi-Fi setting is on): if credentials exist in NVS → STA, connect with
    retries; on success → mDNS, HAP (if enabled), `TakeStatusConnected(true)`.
-2. No credentials, or N failed attempts → SoftAP `MPPT-xxxxxx` (open or with a fixed
-   password, Kconfig) with captive portal: DNS catch-all + DHCP option 114, so the sign-in page
+2. No credentials, or N failed attempts → open SoftAP `MPPT-xxxxxx` (private project, at most
+   a few devices; a password can be set in Kconfig) with captive portal: DNS catch-all + DHCP option 114, so the sign-in page
    opens automatically on iOS, Android and Windows.
 3. Portal page: scanned networks with signal strength, password field, connect button,
    status. HTTP endpoints `/`, `/scan`, `/connect`, `/status`.
@@ -206,12 +211,18 @@ Behaviour:
 6. "Reset WiFi" (menu, or IO0 held 3 s) erases credentials and returns to the portal.
 
 HTTP server and port 80: the HomeKit SDK runs its own `esp_http_server` instance on port 80
-(`hap_platform_httpd`), and the original `app_wifi` registers its SoftAP provisioning handlers
-on that instance via `hap_platform_httpd_get_handle()`. `captive-wifi` therefore runs its own
-server only while the portal is active (AP mode, HAP not yet started) and stops it before
-`hap_start()`. The later status web page (phase 5) registers its URI handlers on the HAP
-server when HAP is on, and on a `captive-wifi` server when HAP is off, so both never listen on
-port 80 at the same time. Wi-Fi is a setting separate from HAP for this status page.
+(`hap_platform_httpd`, stack 12 KB, 8 sockets, 16 URI handlers by default, of which HAP uses 8:
+`/pair-setup`, `/pair-verify`, `/accessories`, `/characteristics` GET+PUT, `/pairings`,
+`/identify`, `/prepare`). Registering application pages on that instance is the supported way
+(the original `app_wifi` does it via `hap_platform_httpd_get_handle()`): HAP encrypts only its
+own controller sessions through per-socket send/receive overrides after pair-verify, browser
+sessions stay plain HTTP and unknown URIs get a 404 from the same server. `captive-wifi`
+therefore runs its own server only while the portal is active (AP mode, HAP not yet started)
+and stops it before `hap_start()`. The later status web page (phase 5) registers its URI
+handlers on the HAP server when HAP is on (keeping the page small: static HTML plus a JSON
+endpoint polled every few seconds, so it never competes with pairing crypto for long), and on
+a `captive-wifi` server when HAP is off. Both never listen on port 80 at the same time. Wi-Fi is
+a setting separate from HAP for this status page.
 
 `app_wifi` facts carried over: `esp_netif_init`, default event loop, STA netif with hostname,
 `WIFI_INIT_CONFIG_DEFAULT`, reconnect on `WIFI_EVENT_STA_DISCONNECTED`, IPv6 link-local,
@@ -372,8 +383,9 @@ OTA through `fupdateota` (ESP32 path: `esp_https_ota_begin` → image descriptor
 compare → download → `esp_https_ota_finish`; the application reboots on
 `FW_UPG_STATUS_SUCCESS`), URL
 `https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin`, certificate bundle
-enabled. The firmware version comes from `version.txt` → `PROJECT_VER` → app descriptor, which
-is also what HomeKit reports as Firmware Revision and what the OTA version check compares
+enabled. The firmware version is `CONFIG_APP_PROJECT_VER` in `sdkconfig.defaults`
+(`CONFIG_APP_PROJECT_VER_FROM_CONFIG=y`), which ESP-IDF writes into the app descriptor; that is
+what HomeKit reports as Firmware Revision and what the OTA version check compares
 (`major.minor.patch`, only a strictly newer image is installed). An automatic check runs
 1 minute after Wi-Fi connects; a manual check/update is in Device Setup → FW Update.
 

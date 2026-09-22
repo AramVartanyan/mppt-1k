@@ -5,10 +5,8 @@ CONFIG_IDF_TARGET="esp32s2"
 CONFIG_APP_PROJECT_VER_FROM_CONFIG=y
 CONFIG_APP_PROJECT_VER="0.1.0"
 
-# OTA (fupdateota)
-CONFIG_FIRMWARE_UPGRADE_URL="https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin"
-CONFIG_SKIP_COMMON_NAME_CHECK=y
-CONFIG_USE_CERT_BUNDLE=y
+# OTA (general-ota); server certificates come from the mbedTLS bundle below
+CONFIG_GENERAL_OTA_URL="https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin"
 
 # Partitions (4 MB, two 1600 KB OTA slots, HomeKit factory_nvs / nvs_keys)
 CONFIG_PARTITION_TABLE_CUSTOM=y
@@ -36,10 +34,11 @@ CONFIG_LWIP_AUTOIP=y
 CONFIG_LWIP_AUTOIP_RATE_LIMIT_INTERVAL=60
 CONFIG_LWIP_DHCPS=y
 
-# mbedTLS
+# mbedTLS (certificate bundle is required by general-ota)
 CONFIG_MBEDTLS_HARDWARE_MPI=y
 CONFIG_MBEDTLS_HARDWARE_SHA=n
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
 
 # HomeKit SDK
 # Room for the application web page handlers next to the 8 HAP URIs.

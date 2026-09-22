@@ -110,6 +110,8 @@ thermistors, LCD and buttons fitted.
   - `container_nvs` — blob storage wrapper over `nvs_flash`, used for all settings.
   - `captive-wifi` (new, MIT) — Wi-Fi station management with captive-portal fallback,
     replaces `app_wifi` from the HomeKit SDK. See 2.6.
+  - `general-ota` (new, MIT) — HTTPS firmware update without HomeKit ties, replaces
+    `fupdateota`. See section 6.
 - Managed components (`main/idf_component.yml`):
   - `espressif/ntc_driver` — NTC on the on-chip ADC (TH2).
   - `esp-idf-lib/hd44780` — HD44780 driver used standalone with a project-supplied PCF8574
@@ -117,14 +119,14 @@ thermistors, LCD and buttons fitted.
     header-only `esp-idf-lib/esp_idf_lib_helpers` for its delay macros.
 - External components expected in the build tree but **not** part of this repository
   (`components/*.txt` point to them): `esp-homekit-sdk` (`homekit`), `button` (`iot_button`),
-  `outputwrite`, `fupdateota`, `app_hap_setup_payload`, `qrcode`, `mdns` (registry; required
-  by HomeKit and reused by `captive-wifi`).
+  `outputwrite`, `app_hap_setup_payload`, `qrcode`, `mdns` (registry; required by HomeKit and
+  reused by `captive-wifi`).
 
 ### 2.1.1 Build layout
 
 `project/mppt-hap/CMakeLists.txt` expects the repository root (or `HOMEKIT_PATH`) to contain
 `components/button`, `components/homekit` (esp-homekit-sdk) and `project/common` with
-`esp32-ads1115`, `container_nvs`, `captive-wifi`, `outputwrite`, `fupdateota`,
+`esp32-ads1115`, `container_nvs`, `captive-wifi`, `general-ota`, `outputwrite`,
 `app_hap_setup_payload` and `qrcode`. `set(COMPONENTS main)` limits the build to `main` and
 its transitive `REQUIRES`, so other components in those folders (e.g. `app_wifi`) are not
 compiled. Project and binary name: `mppt1hs2`.
@@ -142,7 +144,8 @@ Phase 1 image: 752 KB of the 1600 KB OTA slot.
 
 | File | Responsibility | FUGU origin |
 |---|---|---|
-| `app_main.c` | boot, safe outputs first, NVS, tasks, Wi-Fi / HAP start if enabled, IO0 reset button, OTA | `setup()` |
+| `app_main.c` | boot, safe outputs first, NVS, tasks, Wi-Fi / HAP start if enabled, IO0 reset button, OTA events | `setup()` |
+| `project/common/general-ota` | HTTPS OTA: check-only, update, events (section 6) | — |
 | `mppt_config.h` | pins and constants from Kconfig | `#define`s |
 | `mppt_state.h` | shared measurement/state struct + mutex | globals |
 | `mppt_hal.c/.h` | I2C buses, ADS1115, LCD callback, LEDC PWM, GPIO, NTC ADC | Arduino calls |
@@ -202,7 +205,7 @@ HomeKit template.
 
 New relative to FUGU: 12 V rail power-good input (PWR12) checked before enabling the gate
 driver, HomeKit, Wi-Fi captive portal, single-firmware Wi-Fi / HAP on/off from the menu, OTA
-update via `fupdateota` (automatic check 1 min after Wi-Fi connects, and on demand from the
+update via `general-ota` (automatic check 1 min after Wi-Fi connects, and on demand from the
 menu).
 
 ### 2.6 `captive-wifi` component
@@ -382,7 +385,7 @@ One accessory (category Switch), enabled only when the "HAP enabled" setting is 
 |---|---|---|
 | Accessory Information | name `MPPT-xxxxxx`, manufacturer, model, serial = Wi-Fi MAC, firmware = `CONFIG_APP_PROJECT_VER`, hardware = 1.1 | Kconfig |
 | Switch "Charger" | On = charging enabled | `chargingPause` inverted |
-| ↳ custom (existing) | Display (LCD backlight), Firmware Update trigger, FW Update Status | existing template |
+| ↳ custom (existing) | Display (LCD backlight) | existing template; the OTA trigger/status characteristics are dropped, OTA is driven from the LCD menu |
 | ↳ custom (writable) | Output Mode, MPPT Mode, Battery Max V, Battery Min V, Charging Current | menu settings |
 | ↳ custom (read-only, later) | Vin, Iin, Vout, Iout, PWM, error bitmask, Wh (Eve UUIDs for Eve app history) | deferred |
 | Battery Service | Battery Level = SOC %, Charging State = charging / not charging / not chargeable (PSU or preset "None"), Status Low Battery (< 10 %) | Blynk LED1–3 |
@@ -404,26 +407,30 @@ Project code name (CMake project and binary name): **`mppt1hs2`**.
 `partitions_hap.csv`: 4 MB flash, `sec_cert`, `nvs`, `otadata`, `phy_init`, `ota_0` / `ota_1`
 (1600 KB each), `factory_nvs`, `nvs_keys`.
 
-OTA through `fupdateota` (ESP32 path: `esp_https_ota_begin` → image descriptor → version
-compare → download → `esp_https_ota_finish`; the application reboots on
-`FW_UPG_STATUS_SUCCESS`), URL
-`https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin`, certificate bundle
-enabled. The firmware version is `CONFIG_APP_PROJECT_VER` in `sdkconfig.defaults`
-(`CONFIG_APP_PROJECT_VER_FROM_CONFIG=y`), which ESP-IDF writes into the app descriptor; that is
-what HomeKit reports as Firmware Revision and what the OTA version check compares
-(`major.minor.patch`, only a strictly newer image is installed). An automatic check runs
-1 minute after Wi-Fi connects; a manual check/update is in Device Setup → FW Update.
+OTA through the **`general-ota`** component (`project/common/general-ota`, MIT): the
+`esp_https_ota` streaming flow of `fupdateota` without the HomeKit coupling. Image URL
+`https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin`
+(`CONFIG_GENERAL_OTA_URL`), server certificates from the mbedTLS bundle
+(`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y` in `sdkconfig.defaults`). The firmware version is
+`CONFIG_APP_PROJECT_VER` (`CONFIG_APP_PROJECT_VER_FROM_CONFIG=y`), written by ESP-IDF into the
+app descriptor; HomeKit reports it as Firmware Revision and the OTA check compares it
+(`major.minor.patch`, only a strictly newer image is installed).
 
-Required changes in `fupdateota` (separate repository, own PR):
+What changed against `fupdateota` and why:
 
-1. `otaUpdate()` refuses to run while `hap_get_paired_controller_count() == 0`. With HAP
-   disabled this blocks OTA entirely, so the pairing guard becomes optional (Kconfig, default
-   on for HomeKit-only devices, off here) or moves to the caller.
-2. A check-only call (`otaCheckVersion()`: fetch the descriptor, compare, abort without
-   writing) so the menu can show "up to date" / "vX.Y.Z available" and the automatic check
-   does not download an image that is then rejected.
-3. `CMakeLists.txt`: add `mbedtls` to `REQUIRES` (ESP-IDF 5.5 no longer exposes
-   `esp_crt_bundle.h` transitively; the build fails without it).
+1. No `hap_get_paired_controller_count()` guard and no `FW_UPG_STATUS_*` values: with HAP
+   disabled the old guard blocked OTA for good, and the status values existed only for the
+   HomeKit characteristics of display-less devices. Here the LCD shows the state.
+2. `general_ota_check()` fetches the image descriptor, compares and aborts without writing,
+   so the menu shows "up to date" or "vX.Y.Z available" and the automatic check never
+   downloads an image that is then rejected. `general_ota_update()` does check + download.
+3. Events (`check start`, `up to date`, `update available`, `download start`, `progress`,
+   `success`, `failed`) drive the LCD messages and the status LED; the application reboots
+   after `success` (power stage stopped first).
+4. `REQUIRES mbedtls` in the component, so `esp_crt_bundle.h` resolves on ESP-IDF 5.5.
+
+An automatic check runs 1 minute after Wi-Fi connects; a manual check/update is in
+Device Setup → FW Update.
 
 ---
 

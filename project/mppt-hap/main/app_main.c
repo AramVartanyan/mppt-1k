@@ -20,7 +20,7 @@
 #include "outputwrite.h"
 #include "led_indicator.h"
 #include "container_nvs.h"
-#include "fupdateota.h"
+#include "general_ota.h"
 #include "captive_wifi.h"
 #include <hap.h>
 
@@ -53,12 +53,32 @@ void TakeStatusConnected(bool status)
     mppt_state_unlock();
 }
 
-static void ota_indication(fupdateota_indication_t event)
+static void ota_event(const general_ota_info_t *info, void *ctx)
 {
-    switch (event) {
-    case OTA_IND_START: ledOtaStatus(true); break;
-    case OTA_IND_END:   ledOtaStatus(false); break;
-    default: break;
+    (void)ctx;
+    switch (info->event) {
+    case GENERAL_OTA_EVT_DOWNLOAD_START:
+        ledOtaStatus(true);
+        mppt_ui_message("FW update", info->new_version, 0);
+        break;
+    case GENERAL_OTA_EVT_UPDATE_AVAILABLE:
+        mppt_ui_message("FW available", info->new_version, 3000);
+        break;
+    case GENERAL_OTA_EVT_UP_TO_DATE:
+        mppt_ui_message("FW up to date", general_ota_running_version(), 3000);
+        break;
+    case GENERAL_OTA_EVT_SUCCESS:
+        ledOtaStatus(false);
+        mppt_ui_message("FW updated", "rebooting...", 0);
+        mppt_control_emergency_stop();
+        general_ota_reboot();
+        break;
+    case GENERAL_OTA_EVT_FAILED:
+        ledOtaStatus(false);
+        mppt_ui_message("FW update", "failed", 3000);
+        break;
+    default:
+        break;
     }
 }
 
@@ -154,7 +174,8 @@ void app_main(void)
         .ledcChannel = 1,
     };
     ledInit(&led_cfg);
-    otaSetIndication(ota_indication);
+    general_ota_config_t ota_cfg = { .cb = ota_event };
+    general_ota_init(&ota_cfg);
 
     ESP_ERROR_CHECK(mppt_hal_init());
     mppt_sensors_init();

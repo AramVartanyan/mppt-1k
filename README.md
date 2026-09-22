@@ -266,10 +266,10 @@ a setting separate from HAP for this status page.
 | Setting | Default | Range / values | Source |
 |---|---|---|---|
 | Charging enabled | on | on/off | menu, HomeKit Switch |
-| Output mode | Charger | Charger / PSU | menu, HomeKit custom |
+| Output mode | Charger | Charger / PSU (regulated output voltage, battery optional) | menu, HomeKit custom |
 | MPPT algorithm | on | on = MPPT, off = CC-CV only | menu, HomeKit custom |
 | Battery preset | None | see 3.2; the user selects the type after first power-up | menu |
-| Battery max voltage | 27.30 V (FUGU) | 0–50 V, 0.01 V step | menu, HomeKit custom |
+| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–50 V, 0.1 V step in the menu | menu, HomeKit custom |
 | Battery min voltage | 22.40 V (FUGU) | 0–50 V | menu, HomeKit custom |
 | Charging current | 30.0 A | 0–30 A | menu, HomeKit custom |
 | Fan enabled | on | on/off | menu, HomeKit Fan |
@@ -298,7 +298,18 @@ The preset sets max/min voltage; the user can still edit both afterwards.
 | Custom | user-set | user-set | |
 
 Default preset is **None**. Hardware limit `vOutSystemMax = 50 V` (as in FUGU), so 48 V
-systems are not offered. Preset voltages are proposals, to be confirmed before phase 2.
+systems are not offered. Preset voltages confirmed.
+
+Defined states (no undefined combination):
+
+| Output mode | Preset | Behaviour |
+|---|---|---|
+| Charger | None | power stage off, LCD shows "Select battery type" until a preset or Custom is chosen |
+| Charger | preset / Custom | FUGU charger algorithm (MPPT or CC-CV) with the preset voltages and current |
+| PSU | any (None allowed) | regulated output at "Output voltage" for a load without battery; on input under-voltage the duty is ramped down to zero within `CONFIG_MPPT_PSU_SHUTDOWN_RAMP_MS` (default 100 ms: fast enough for a downstream MCU's brown-out detector, controlled enough to avoid an abrupt step), then the stage is disabled until Vin exceeds the set voltage plus dropout plus hysteresis for the recovery time |
+
+Menu editing steps: voltages 0.1 V, current 0.5 A, temperatures 1 °C, price 0.01. Short press
+one step, hold auto-repeat.
 
 ### 3.3 Compile-time parameters (Kconfig, `menuconfig → MPPT`)
 
@@ -368,12 +379,19 @@ battery preset and energy price, and a **Device Setup** sub-menu:
 | # | Item | Behaviour |
 |---|---|---|
 | 1 | Enable HAP / Disable HAP | label reflects the current state; turning on also turns Wi-Fi on; confirm → reboot |
-| 2 | Enable WiFi / Disable WiFi | shown only while HAP is off |
-| 3 | FW Update | checks `otafw` for a newer version and installs it; progress on the LCD |
-| 4 | Reset WiFi | erases credentials, restarts the captive portal |
-| 5 | Factory Reset | confirm → erase settings, counters, Wi-Fi and HAP pairing → reboot |
-| 6 | Info | firmware version, IP, RSSI, HAP pairing state |
-| 7 | Exit | back to the main menu |
+| 2 | Enable WiFi / Disable WiFi | shown only while HAP is off; confirm → reboot |
+| 3 | FW Update | checks `otafw`; "up to date" or the update prompt (section 6) |
+| 4 | Reset WiFi | erases Wi-Fi credentials only (HAP pairing kept) → reboot into the portal |
+| 5 | HAP Reset | shown only while HAP is on; removes HomeKit pairings only (Wi-Fi and settings kept) → reboot |
+| 6 | Factory Reset | confirm → erase settings, counters, Wi-Fi credentials and HAP data → reboot |
+| 7 | Info | firmware version, IP, RSSI, HAP pairing state |
+| 8 | Exit | back to the main menu |
+
+Every Wi-Fi / HAP change reboots the device; the LCD says so before confirming. Reset
+overview: IO0 held 3 s = Reset WiFi; IO0 held 10 s, MENU held 10 s or menu item = Factory
+Reset; HAP Reset only from the menu. With HAP off the HomeKit SDK is not initialised, so the
+Wi-Fi and factory resets never call into it; the HAP data is erased through its NVS
+namespaces instead.
 
 ---
 
@@ -429,8 +447,13 @@ What changed against `fupdateota` and why:
    after `success` (power stage stopped first).
 4. `REQUIRES mbedtls` in the component, so `esp_crt_bundle.h` resolves on ESP-IDF 5.5.
 
-An automatic check runs 1 minute after Wi-Fi connects; a manual check/update is in
-Device Setup → FW Update.
+Update policy: an automatic **check** runs 1 minute after Wi-Fi connects. When a newer image
+exists the LCD shows `Update Firmware?  Yes / No` with **No** selected; the prompt stays until
+the user answers (UP/DOWN moves, MENU confirms). Yes → power stage off → download with
+progress → reboot. No → not asked again until the next boot or a newer version appears.
+Installation is never started without this confirmation, because the update reboots the
+device and cuts the output while the load may be powered. Device Setup → FW Update runs the
+same check and prompt on demand (for devices that have not rebooted for a long time).
 
 ---
 
@@ -441,8 +464,9 @@ Each phase is reviewed and approved before the next starts.
 1. **Infrastructure** (done) — `esp32s2` target, `sdkconfig.defaults`, Kconfig with MPPT32
    pins, CMake and `idf_component.yml`, ported `ads1115`, module skeletons with the module
    APIs, `captive-wifi` STA part, `app_main` boot order. Builds; buck disabled.
-2. **Measurement and UI** — `mppt_hal`, `mppt_sensors`, LCD pages, menu, NVS settings, log
-   telemetry. Tested from USB power without the power stage.
+2. **Measurement and UI** — `mppt_sensors`, LCD pages, numbered menu with Device Setup,
+   settings editing, counter persistence, OTA prompt, reset semantics, TH2 gated by Wi-Fi.
+   Tested from USB power without the power stage.
 3. **Control** — `mppt_control`: protection and charging algorithm. First tests with a
    laboratory PSU instead of a panel, then PV.
 4. **Connectivity** — `captive-wifi` component, Device Setup menu, OTA check; then
@@ -456,7 +480,9 @@ Each phase is reviewed and approved before the next starts.
 
 - L8 parameters (see 1.5).
 - NTC B constant after calibration.
-- Battery preset voltages (3.2) to be confirmed.
+- ACS712 midpoint auto-calibration: kept exactly as in FUGU for now (whenever the buck is off
+  and no FLV/OOV); a plausibility guard (PGOOD high, sensor voltage 2.0–3.0 V) is under
+  consideration.
 - HomeKit Fan service and custom characteristics: final configuration after testing with
   Apple's tools.
 - Console: UART0 for development; USB CDC to be evaluated later.

@@ -29,7 +29,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | 12 V rail | LM5164 buck from PV input | powers gate driver, fan, 7805 |
 | 5 V / 3.3 V | LM7805 → LD1117V33 | 5 V for ACS712 and LCD; USB 5 V also feeds the 3.3 V LDO |
 | Inductor | L8, 60 µH (schematic) | parameters to be measured |
-| Fan | 2-pin, Q5 (SI2306A) low-side switch, T3 connector | |
+| Fan | 3-wire 12 V fan on T3 (pin 2 = 12 V, pin 3 = switched GND via Q5 SI2306A, pin 1 NC) | on/off only; tachometer wire unconnected, no speed control |
 | Display | 16×2 HD44780 LCD with PCF8574 I2C backpack, T4 connector (5 V) | |
 | Buttons | UP, DOWN, MENU, T5 connector, active low, no external pull-ups | internal pull-ups used |
 | Thermistors | TH1, TH2, 10 kΩ NTC, on PCB between the TO-220 MOSFETs | |
@@ -43,7 +43,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | SDWN | IO38 | out | IR2104 SD#, buck enable (high = enabled, R13 pull-down) |
 | BFLOW | IO12 | out | backflow MOSFET enable (high = B1212 on = Q1/Q1A on, R20 pull-down → off at reset) |
 | FAN | IO3 | out | fan (high = on) |
-| PWR12 | IO4 | out | LM5164 EN/UVLO, 12 V rail enable (R26 pull-up → on by default) |
+| PWR12 | IO4 | in | LM5164 PGOOD (open drain, R26 10 kΩ pull-up): high = 12 V rail OK. EN/UVLO is tied to VIN, the rail is always enabled |
 | SDA1 / SCL1 | IO35 / IO36 | I2C bus 0 | ADS1115 (10 kΩ pull-ups to 3.3 V) |
 | SDA2 / SCL2 | IO9 / IO10 | I2C bus 1 | LCD PCF8574 (10 kΩ pull-ups to 3.3 V, LCD powered from 5 V) |
 | READ | IO39 | in | ADS1115 ALERT/RDY (10 kΩ pull-up) |
@@ -164,12 +164,15 @@ Changed or fixed:
 7. Battery presets replace free-form voltages as the primary way to configure the battery
    (see 3.2). Free-form voltage/current editing remains available.
 
-Dropped: Blynk telemetry, Bluetooth flag, `electricalPrice` / `energySavings`, dual-core
-task pinning, the Arduino `String` firmware info strings (replaced by
-`CONFIG_APP_PROJECT_VER`).
+Kept with changes: `electricalPrice` / `energySavings` stay (default 0.27 EUR/kWh), but the
+price becomes a menu setting and the savings are shown on the LCD only, not in HomeKit.
 
-New relative to FUGU: PWR12 control of the 12 V rail (default always on), HomeKit,
-single-firmware HAP on/off from the menu, OTA update via `fupdateota`.
+Dropped: Blynk telemetry, Bluetooth flag, dual-core task pinning, the Arduino `String`
+firmware info strings (replaced by `CONFIG_APP_PROJECT_VER`), the Light Sensor service of the
+HomeKit template.
+
+New relative to FUGU: 12 V rail power-good input (PWR12) checked before enabling the gate
+driver, HomeKit, single-firmware HAP on/off from the menu, OTA update via `fupdateota`.
 
 ---
 
@@ -182,9 +185,9 @@ single-firmware HAP on/off from the menu, OTA update via `fupdateota`.
 | Charging enabled | on | on/off | menu, HomeKit Switch |
 | Output mode | Charger | Charger / PSU | menu, HomeKit custom |
 | MPPT algorithm | on | on = MPPT, off = CC-CV only | menu, HomeKit custom |
-| Battery preset | 24 V lead-acid | see 3.2 | menu |
-| Battery max voltage | 27.30 V | 0–50 V, 0.01 V step | menu, HomeKit custom |
-| Battery min voltage | 22.40 V | 0–50 V | menu, HomeKit custom |
+| Battery preset | None | see 3.2; the user selects the type after first power-up | menu |
+| Battery max voltage | 27.30 V (FUGU) | 0–50 V, 0.01 V step | menu, HomeKit custom |
+| Battery min voltage | 22.40 V (FUGU) | 0–50 V | menu, HomeKit custom |
 | Charging current | 30.0 A | 0–30 A | menu, HomeKit custom |
 | Fan enabled | on | on/off | menu, HomeKit Fan |
 | Fan on temperature | 60 °C | 0–100 °C | menu |
@@ -192,9 +195,10 @@ single-firmware HAP on/off from the menu, OTA update via `fupdateota`.
 | HAP (HomeKit + Wi-Fi) enabled | off | on/off, change → confirm → reboot | menu |
 | LCD backlight | on | on/off | menu, HomeKit custom "Display" |
 | LCD backlight sleep | never | never / 10 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
+| Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu |
 | Telemetry counter auto-reset | never | never / day / week / month / year | menu |
 | Serial telemetry mode | 1 (all) | 0 off, 1 all, 2 essential, 3 numbers | menu |
-| Wh, kWh, run time | 0 | persisted counters | automatic |
+| Wh, kWh, run time | 0 | persisted counters, see 3.4 | automatic |
 
 ### 3.2 Battery presets
 
@@ -207,11 +211,10 @@ The preset sets max/min voltage; the user can still edit both afterwards.
 | 24 V lead-acid | 28.80 V | 23.60 V | FUGU default 27.3 / 22.4 kept as an alternative "24 V AGM float" preset |
 | 12 V LiFePO4 (4S) | 14.40 V | 12.00 V | |
 | 24 V LiFePO4 (8S) | 28.80 V | 24.00 V | |
-| 48 V LiFePO4 (16S) | 57.60 V | 48.00 V | only if the hardware limit below allows |
 | Custom | user-set | user-set | |
 
-Hardware limit: `vOutSystemMax = 50 V` in FUGU; final value for MPPT32 to be confirmed
-(80 V MOSFETs, VDR and capacitor ratings decide).
+Default preset is **None**. Hardware limit `vOutSystemMax = 50 V` (as in FUGU), so 48 V
+systems are not offered. Preset voltages are proposals, to be confirmed before phase 2.
 
 ### 3.3 Compile-time parameters (Kconfig, `menuconfig → MPPT`)
 
@@ -228,27 +231,51 @@ Hardware limit: `vOutSystemMax = 50 V` in FUGU; final value for MPPT32 to be con
 - PWM: frequency 39 kHz, resolution 11 bit (LEDC low-speed mode), P&O step 1.
 - NTC: R25, B, R_fixed, Vdd, circuit mode, TH2 ADC channel.
 - Timing: routine interval 250 ms, LCD interval 1 s, HAP push interval 2 s, error window 1 s,
-  error count limit 5, Wh persist interval / delta.
+  error count limit 5, menu timeout 7 s, Wh persist interval.
 - HomeKit: manufacturer, model, hardware revision, setup code (test builds only), name pattern.
-- Console: UART0 (default) or USB CDC.
+- Console: UART0 (default, also used for flashing) or USB CDC on the mini-USB port.
+
+### 3.4 Persistence of energy counters
+
+Wh / run-time counters are written to NVS:
+
+- once per hour while the charger is active;
+- immediately on the transition to input under-voltage (IUV, sunset) or when the buck is
+  disabled by a fault, since these precede a possible power loss;
+- on every settings change (settings and counters are separate NVS keys).
+
+The MCU stays powered from the battery side at night (FUGU `inputSource = 2`), so the sunset
+write is not a race against power loss.
 
 ---
 
 ## 4. LCD and buttons
 
-Three buttons replace FUGU's four (Left / Right / Back / Select).
+Three buttons replace FUGU's four (Left / Right / Back / Select). Navigation is a standard
+numbered list menu.
 
-| Button | Short press | Long press (3 s) |
-|---|---|---|
-| UP | previous page / value + | fast increment |
-| DOWN | next page / value − | fast decrement |
-| MENU | enter settings / next item / confirm | exit and save (from settings), or cancel when on the confirmation item |
+| Context | UP | DOWN | MENU short | MENU long (2 s) |
+|---|---|---|---|---|
+| Display pages | previous page | next page | open menu | — |
+| Menu list | previous item | next item | select item | exit (same as "Exit") |
+| Value editing | value + (hold = auto-repeat) | value − (hold = auto-repeat) | confirm and save | cancel edit |
+
+Rules:
+
+- Every list item has a number; **Exit is always the last item**. In a sub-menu, Exit returns
+  to the previous level; at the top level it returns to the display pages.
+- 7 s without a key press at any level returns to the display pages; an unconfirmed edit is
+  discarded.
+- MENU long press is free in this scheme (FUGU used long Select only to enter settings), so it
+  is mapped to Exit/Cancel.
 
 Display pages (from FUGU): 1 power + energy + SOC + Vout + Iout; 2 input and output V/A;
-3 energy + SOC bar graph; 4 temperature + fan; 5 settings entry.
+3 energy + SOC bar graph; 4 temperature + fan; 5 energy savings (kWh × price).
 
-Additional menu items not in FUGU: HAP on/off (with reboot confirmation), Wi-Fi reset,
-factory reset, battery preset, firmware version / HAP pairing state.
+Menu items: FUGU's 12 settings (charging mode, output mode, battery max/min, charging
+current, fan, fan temperature, shutdown temperature, backlight sleep, counter reset,
+factory reset, save/autoload) plus battery preset, energy price, HAP on/off (with reboot
+confirmation), Wi-Fi reset, firmware version / HAP pairing state.
 
 ---
 
@@ -277,9 +304,11 @@ available from the LCD menu.
 
 ## 6. Partition table and OTA
 
+Project code name (CMake project and binary name): **`mppt1hs2`**.
+
 `partitions_hap.csv`: 4 MB flash, `sec_cert`, `nvs`, `otadata`, `phy_init`, `ota_0` / `ota_1`
-(1600 KB each), `factory_nvs`, `nvs_keys`. OTA through `fupdateota`, URL in
-`CONFIG_FIRMWARE_UPGRADE_URL`.
+(1600 KB each), `factory_nvs`, `nvs_keys`. OTA through `fupdateota`, URL
+`https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin`.
 
 ---
 
@@ -294,7 +323,7 @@ Each phase is reviewed and approved before the next starts.
 3. **Control** — `mppt_control`: protection and charging algorithm. First tests with a
    laboratory PSU instead of a panel, then PV.
 4. **HomeKit** — `mppt_hap`, replacement of the template callbacks.
-5. **Extras** — TH2 redundancy, PWR12 policy, Wh persistence tuning, Eve characteristics,
+5. **Extras** — TH2 redundancy, Wh persistence tuning, Eve characteristics,
    dynamic fan PWM (3-pin fan, "coming soon" in FUGU).
 
 ---
@@ -303,10 +332,10 @@ Each phase is reviewed and approved before the next starts.
 
 - L8 parameters (see 1.5).
 - NTC B constant after calibration.
-- `vOutSystemMax` for MPPT32 (decides whether 48 V presets are offered).
-- PWR12 policy: always on (default) vs. off on fatal error / at night.
-- Console default: UART0 or USB CDC.
-- OTA URL for this project (`CONFIG_FIRMWARE_UPGRADE_URL` currently points at `otafw/master/mppt.bin`).
+- Battery preset voltages (3.2) to be confirmed.
+- HomeKit Fan service and custom characteristics: final configuration after testing with
+  Apple's tools.
+- Console: UART0 for development; USB CDC to be evaluated later.
 
 ---
 

@@ -8,9 +8,9 @@ The charging logic is a port of Angelo Casimiro's
 (V1.10, CC0 1.0 / public domain) from Arduino/ESP32 to ESP-IDF/ESP32-S2, running on the
 **MPPT32 v1.1** board (`files/Schematic_MPPT32_2026-09-22.pdf`).
 
-> **Status: design phase.** This document is the agreed specification. No application code
-> has been written yet; `project/mppt-hap/main/app_main.c` is a HomeKit template that will be
-> replaced.
+> **Status: phase 1 (infrastructure) done.** This document is the agreed specification.
+> The project builds for `esp32s2` on ESP-IDF v5.5.4 with module skeletons; measurement,
+> control, UI, connectivity and HomeKit follow in phases 2–5 (section 7).
 
 ---
 
@@ -113,11 +113,30 @@ thermistors, LCD and buttons fitted.
 - Managed components (`main/idf_component.yml`):
   - `espressif/ntc_driver` — NTC on the on-chip ADC (TH2).
   - `esp-idf-lib/hd44780` — HD44780 driver used standalone with a project-supplied PCF8574
-    write callback over `i2c_master` (no `i2cdev`/`pcf8574` dependencies).
+    write callback over `i2c_master` (no `i2cdev`/`pcf8574` dependencies). It needs the
+    header-only `esp-idf-lib/esp_idf_lib_helpers` for its delay macros.
 - External components expected in the build tree but **not** part of this repository
   (`components/*.txt` point to them): `esp-homekit-sdk` (`homekit`), `button` (`iot_button`),
   `outputwrite`, `fupdateota`, `app_hap_setup_payload`, `qrcode`, `mdns` (registry; required
   by HomeKit and reused by `captive-wifi`).
+
+### 2.1.1 Build layout
+
+`project/mppt-hap/CMakeLists.txt` expects the repository root (or `HOMEKIT_PATH`) to contain
+`components/button`, `components/homekit` (esp-homekit-sdk) and `project/common` with
+`esp32-ads1115`, `container_nvs`, `captive-wifi`, `outputwrite`, `fupdateota`,
+`app_hap_setup_payload` and `qrcode`. `set(COMPONENTS main)` limits the build to `main` and
+its transitive `REQUIRES`, so other components in those folders (e.g. `app_wifi`) are not
+compiled. Project and binary name: `mppt1hs2`.
+
+```sh
+export HOMEKIT_PATH=/path/to/tree   # optional, defaults to <repo>
+cd project/mppt-hap
+idf.py set-target esp32s2
+idf.py build flash monitor
+```
+
+Phase 1 image: 752 KB of the 1600 KB OTA slot.
 
 ### 2.2 Source layout (`project/mppt-hap/main`)
 
@@ -133,6 +152,7 @@ thermistors, LCD and buttons fitted.
 | `mppt_lcd.c/.h` | display pages and 3-button menu | `8_LCD_Menu.ino` |
 | `mppt_telemetry.c/.h` | periodic log line (`ESP_LOGI`) | `6_Onboard_Telemetry.ino` |
 | `mppt_hap.c/.h` | HomeKit services, started only when enabled | replaces `7_Wireless_Telemetry.ino` (Blynk) |
+| `mppt_state.c/.h` | shared state implementation (mutex) | globals |
 | `project/common/captive-wifi` | Wi-Fi STA + captive portal component (2.6) | `setupWiFi()` |
 
 ### 2.3 Tasks (single core)
@@ -189,11 +209,16 @@ menu).
 
 Own component in `project/common/captive-wifi`, MIT, written against ESP-IDF 5.5 APIs. It
 follows the idea of tonyp7/esp32-wifi-manager and the structure of the official
-`examples/protocols/http_server/captive_portal` example; it keeps the `app_wifi` interface
-that the HomeKit code already uses (`app_wifi_init`, `app_wifi_start`, `TakeStatusConnected`
-callback) so `mppt_hap` needs no changes. Target size: 500–600 lines of C plus ~6 KB embedded
-HTML, no dependencies beyond `esp_wifi`, `esp_netif`, `esp_http_server`, `lwip`, `nvs_flash`
-and `mdns`.
+`examples/protocols/http_server/captive_portal` example. API (`captive_wifi.h`):
+`captive_wifi_init(hostname, callback, ctx)`, `captive_wifi_start()`, `captive_wifi_stop()`,
+credential helpers (`has`, `clear`), status (`is_connected`, `portal_active`, `ap_ssid`,
+`get_ip`, `rssi`) and an event callback (STA connected / disconnected, portal started /
+stopped). The application keeps `TakeStatusConnected(bool)` as the single place that maps
+connection state to the LED and shared state, as the HomeKit template did. Target size:
+500–600 lines of C plus ~6 KB embedded HTML, no dependencies beyond `esp_wifi`,
+`esp_netif`, `esp_http_server`, `lwip`, `nvs_flash` and `mdns`. Phase 1 contains the STA
+part (credentials in NVS namespace `cwifi`, connect, reconnect, events); the portal follows
+in phase 4.
 
 Behaviour:
 
@@ -397,6 +422,8 @@ Required changes in `fupdateota` (separate repository, own PR):
 2. A check-only call (`otaCheckVersion()`: fetch the descriptor, compare, abort without
    writing) so the menu can show "up to date" / "vX.Y.Z available" and the automatic check
    does not download an image that is then rejected.
+3. `CMakeLists.txt`: add `mbedtls` to `REQUIRES` (ESP-IDF 5.5 no longer exposes
+   `esp_crt_bundle.h` transitively; the build fails without it).
 
 ---
 
@@ -404,8 +431,9 @@ Required changes in `fupdateota` (separate repository, own PR):
 
 Each phase is reviewed and approved before the next starts.
 
-1. **Infrastructure** — `esp32s2` target, `sdkconfig.defaults`, Kconfig with MPPT32 pins,
-   CMake and `idf_component.yml`, ported `ads1115`, module skeletons. Builds; buck disabled.
+1. **Infrastructure** (done) — `esp32s2` target, `sdkconfig.defaults`, Kconfig with MPPT32
+   pins, CMake and `idf_component.yml`, ported `ads1115`, module skeletons with the module
+   APIs, `captive-wifi` STA part, `app_main` boot order. Builds; buck disabled.
 2. **Measurement and UI** — `mppt_hal`, `mppt_sensors`, LCD pages, menu, NVS settings, log
    telemetry. Tested from USB power without the power stage.
 3. **Control** — `mppt_control`: protection and charging algorithm. First tests with a

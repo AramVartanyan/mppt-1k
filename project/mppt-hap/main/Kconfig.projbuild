@@ -1,64 +1,443 @@
-menu "Device Settings"
+menu "MPPT Solar Charger (MPPT32 v1.1)"
 
-    config USE_HARDCODED_SETUP_CODE
-        bool "Use hard-coded setup code"
-        default n
-        help
-            HomeKit does not recommend having the setup code programmed in the accessory as is.
-            Instead, it expects setup info (salt-verifier pair) generated for the given setup code.
-            Use this option only for testing purposes. For production, the setup info should be
-            used.
-            
-    config SETUP_CODE
-        string "HomeKit Setup Code"
-        default "111-22-333"
-        depends on USE_HARDCODED_SETUP_CODE
-        help
-            Setup code to be used for HomeKit pairing, if hard-coded setup code is enabled.
+    menu "HomeKit device"
 
-    config SETUP_ID
-        string "HomeKit Setup Id"
-        default "ES32"
-        depends on USE_HARDCODED_SETUP_CODE
-        help
-            Setup id to be used for HomeKit pairing, if hard-coded setup code is enabled.
+        config USE_HARDCODED_SETUP_CODE
+            bool "Use hard-coded setup code"
+            default n
+            help
+                HomeKit does not recommend having the setup code programmed in the accessory as is.
+                Instead, it expects setup info (salt-verifier pair) generated for the given setup code.
+                Use this option only for testing purposes. For production, the setup info should be
+                used.
 
-    config MANIFACTURER
-        string "Device Manifacturer"
-        default "Armo Ltd."
-        help
-            Insert the name of the Device Manifacturer.
-            
-    config NAME
-        string "Device Name"
-        default "MPPT-%02X%02X%02X"
-        help
-            Insert the name of the Device.
+        config SETUP_CODE
+            string "HomeKit Setup Code"
+            default "111-22-333"
+            depends on USE_HARDCODED_SETUP_CODE
 
-    config MODEL
-        string "Device Model"
-        default "MPPT Solar"
-        help
-            Insert the name of the Device Model.
-            
-    config HW
-        string "Device Hardware"
-        default "0.1.1"
-        help
-            Insert the revision of the Device Hardware.
+        config SETUP_ID
+            string "HomeKit Setup Id"
+            default "ES32"
+            depends on USE_HARDCODED_SETUP_CODE
 
-    config RESET_GPIO
-        int "Reset Button GPIO number"
-        range 0 46
-        default 0
-        help
-            GPIO number for Button Input.
-    
-    config LED_GPIO
-        int "Read ADC1 GPIO number"
-        range 0 42
-        default 2
-        help
-            GPIO 14 number for Temperature sensor 2 or LED indicator.
+        config MANIFACTURER
+            string "Device Manufacturer"
+            default "Armo Ltd."
+
+        config NAME
+            string "Device Name (printf pattern with three MAC bytes)"
+            default "MPPT-%02X%02X%02X"
+
+        config MODEL
+            string "Device Model"
+            default "MPPT32"
+
+        config HW
+            string "Device Hardware revision"
+            default "1.1"
+
+    endmenu
+
+    menu "GPIO (MPPT32 v1.1 defaults)"
+
+        config MPPT_GPIO_PWM
+            int "Buck PWM output (IR2104 IN)"
+            range 0 46
+            default 13
+
+        config MPPT_GPIO_BUCK_EN
+            int "Buck enable output (IR2104 SD#, high = enabled)"
+            range 0 46
+            default 38
+
+        config MPPT_GPIO_BACKFLOW
+            int "Backflow MOSFET enable output (high = B1212 on = MOSFET on)"
+            range 0 46
+            default 12
+
+        config MPPT_GPIO_FAN
+            int "Fan output (high = on)"
+            range 0 46
+            default 3
+
+        config MPPT_GPIO_PWR12_GOOD
+            int "12 V rail power-good input (LM5164 PGOOD, high = OK)"
+            range 0 46
+            default 4
+
+        config MPPT_GPIO_ADS_RDY
+            int "ADS1115 ALERT/RDY input"
+            range 0 46
+            default 39
+
+        config MPPT_GPIO_BTN_UP
+            int "UP button input (active low, internal pull-up)"
+            range 0 46
+            default 6
+
+        config MPPT_GPIO_BTN_DOWN
+            int "DOWN button input (active low, internal pull-up)"
+            range 0 46
+            default 5
+
+        config MPPT_GPIO_BTN_MENU
+            int "MENU button input (active low, internal pull-up)"
+            range 0 46
+            default 7
+
+        config RESET_GPIO
+            int "HomeKit reset button (boot button, 3 s Wi-Fi reset, 10 s factory reset)"
+            range 0 46
+            default 0
+
+        config LED_GPIO
+            int "Status LED output (not fitted on MPPT32 v1.1; IO2 is free on the module)"
+            range 0 46
+            default 2
+
+        config LED_ACTIVE_LOW
+            bool "Status LED is active low"
+            default n
+
+    endmenu
+
+    menu "I2C"
+
+        config MPPT_I2C0_SDA
+            int "Bus 0 SDA (ADS1115)"
+            range 0 46
+            default 35
+
+        config MPPT_I2C0_SCL
+            int "Bus 0 SCL (ADS1115)"
+            range 0 46
+            default 36
+
+        config MPPT_I2C1_SDA
+            int "Bus 1 SDA (LCD)"
+            range 0 46
+            default 9
+
+        config MPPT_I2C1_SCL
+            int "Bus 1 SCL (LCD)"
+            range 0 46
+            default 10
+
+        config MPPT_I2C_FREQ_HZ
+            int "I2C clock (Hz)"
+            range 10000 1000000
+            default 400000
+
+    endmenu
+
+    menu "ADS1115"
+
+        config MPPT_ADS_ADDR
+            hex "I2C address"
+            range 0x48 0x4B
+            default 0x48
+
+        config MPPT_ADS_CH_VIN
+            int "Channel: input (PV) voltage"
+            range 0 3
+            default 3
+
+        config MPPT_ADS_CH_VOUT
+            int "Channel: output (battery) voltage"
+            range 0 3
+            default 0
+
+        config MPPT_ADS_CH_CURRENT
+            int "Channel: current sensor"
+            range 0 3
+            default 2
+
+        config MPPT_ADS_CH_TEMP
+            int "Channel: NTC TH1"
+            range 0 3
+            default 1
+
+        choice MPPT_ADS_PGA
+            prompt "PGA full-scale range"
+            default MPPT_ADS_PGA_4096
+            help
+                ±4.096 V covers the 0–3.3 V sensor range with the full ADS1115 resolution
+                (FUGU gain 1). ±2.048 V (FUGU default gain 2) clips the current sensor above
+                2.048 V.
+
+            config MPPT_ADS_PGA_6144
+                bool "±6.144 V"
+            config MPPT_ADS_PGA_4096
+                bool "±4.096 V"
+            config MPPT_ADS_PGA_2048
+                bool "±2.048 V"
+        endchoice
+
+        config MPPT_ADS_PGA_INDEX
+            int
+            default 0 if MPPT_ADS_PGA_6144
+            default 1 if MPPT_ADS_PGA_4096
+            default 2 if MPPT_ADS_PGA_2048
+
+        config MPPT_ADS_USE_RDY_PIN
+            bool "Use ALERT/RDY pin instead of a fixed conversion delay"
+            default y
+
+    endmenu
+
+    menu "LCD (HD44780 + PCF8574)"
+
+        config MPPT_LCD_ENABLE
+            bool "LCD fitted"
+            default y
+
+        config MPPT_LCD_ADDR
+            hex "PCF8574 I2C address"
+            range 0x20 0x3F
+            default 0x27
+            depends on MPPT_LCD_ENABLE
+
+        config MPPT_LCD_PIN_RS
+            int "PCF8574 bit: RS"
+            range 0 7
+            default 0
+            depends on MPPT_LCD_ENABLE
+
+        config MPPT_LCD_PIN_RW
+            int "PCF8574 bit: RW"
+            range 0 7
+            default 1
+            depends on MPPT_LCD_ENABLE
+
+        config MPPT_LCD_PIN_E
+            int "PCF8574 bit: E"
+            range 0 7
+            default 2
+            depends on MPPT_LCD_ENABLE
+
+        config MPPT_LCD_PIN_BL
+            int "PCF8574 bit: backlight"
+            range 0 7
+            default 3
+            depends on MPPT_LCD_ENABLE
+
+        config MPPT_LCD_PIN_D4
+            int "PCF8574 bit: D4 (D5..D7 follow consecutively)"
+            range 0 7
+            default 4
+            depends on MPPT_LCD_ENABLE
+
+    endmenu
+
+    menu "Calibration (FUGU constants, integer scaled)"
+
+        config MPPT_CAL_VIN_RATIO_X1000
+            int "Input voltage divider ratio x1000 (R2 200k / R3 5.1k = 40216)"
+            default 40216
+
+        config MPPT_CAL_VOUT_RATIO_X1000
+            int "Output voltage divider ratio x1000 (R16||R18 / R17 = 24500)"
+            default 24500
+
+        config MPPT_CAL_CURRENT_SCALE_X1000
+            int "Current sensor divider gain x1000 (R4/R5 = 1330)"
+            default 1330
+
+        config MPPT_CAL_CURRENT_SENS_UV_PER_A
+            int "Current sensor sensitivity (µV/A, ACS712-30A = 66000)"
+            default 66000
+
+        config MPPT_CAL_CURRENT_MIDPOINT_MV
+            int "Current sensor midpoint (mV), auto-calibrated at runtime"
+            default 2525
+
+        config MPPT_CAL_AVG_VOLTAGE
+            int "Voltage samples averaged per cycle"
+            range 1 32
+            default 3
+
+        config MPPT_CAL_AVG_CURRENT
+            int "Current samples averaged per cycle"
+            range 1 32
+            default 4
+
+        config MPPT_CAL_AVG_TEMP
+            int "Temperature samples averaged (cycles)"
+            range 1 5000
+            default 500
+
+        config MPPT_CAL_VOLTAGE_DROPOUT_MV
+            int "Buck dropout voltage (mV)"
+            default 1000
+
+        config MPPT_CAL_VBAT_THRESH_MV
+            int "Output over-voltage threshold above battery max (mV)"
+            default 1500
+
+        config MPPT_CAL_IIN_ABS_MA
+            int "Absolute input current limit (mA)"
+            default 31000
+
+        config MPPT_CAL_IOUT_ABS_MA
+            int "Absolute output current limit (mA)"
+            default 50000
+
+        config MPPT_CAL_VIN_SYS_MIN_MV
+            int "Minimum system voltage (mV)"
+            default 10000
+
+        config MPPT_CAL_VOUT_SYS_MAX_MV
+            int "Maximum output voltage of the hardware (mV)"
+            default 50000
+
+        config MPPT_CAL_PPWM_MARGIN_PERMILLE
+            int "Predictive PWM margin (‰ of the ideal duty, FUGU 99.5 %)"
+            range 500 1000
+            default 995
+
+        config MPPT_CAL_PWM_MAX_DC_PERMILLE
+            int "Maximum duty cycle (‰, FUGU 97 %)"
+            range 500 990
+            default 970
+
+        config MPPT_CAL_EFFICIENCY_PERMILLE
+            int "Assumed buck efficiency (‰)"
+            range 500 1000
+            default 1000
+
+    endmenu
+
+    menu "PWM and MPPT"
+
+        config MPPT_PWM_FREQ_HZ
+            int "Buck switching frequency (Hz)"
+            range 1200 312000
+            default 39000
+
+        config MPPT_PWM_RESOLUTION_BITS
+            int "PWM resolution (bits)"
+            range 8 14
+            default 11
+
+        config MPPT_STEP
+            int "P&O duty step per cycle (LSB)"
+            range 1 64
+            default 1
+
+    endmenu
+
+    menu "NTC thermistors"
+
+        config MPPT_NTC_R25_OHM
+            int "NTC resistance at 25 °C (Ω)"
+            default 10000
+
+        config MPPT_NTC_BETA
+            int "NTC beta (K)"
+            default 3950
+
+        config MPPT_NTC_RFIXED_OHM
+            int "Fixed divider resistor (Ω)"
+            default 10000
+
+        config MPPT_NTC_VDD_MV
+            int "Divider supply (mV)"
+            default 3300
+
+        config MPPT_NTC_TO_VCC
+            bool "NTC is on the Vcc side (Vcc -> NTC -> node -> Rfixed -> GND)"
+            default y
+
+        config MPPT_NTC2_ENABLE
+            bool "Read redundant TH2 on the on-chip ADC (only while Wi-Fi is off)"
+            default y
+
+        config MPPT_NTC2_ADC_UNIT
+            int "TH2 ADC unit (1 or 2; IO14 is ADC2)"
+            range 1 2
+            default 2
+            depends on MPPT_NTC2_ENABLE
+
+        config MPPT_NTC2_ADC_CHANNEL
+            int "TH2 ADC channel (IO14 = ADC2_CH3)"
+            range 0 9
+            default 3
+            depends on MPPT_NTC2_ENABLE
+
+    endmenu
+
+    menu "Timing"
+
+        config MPPT_ROUTINE_INTERVAL_MS
+            int "Energy accounting interval (ms)"
+            default 250
+
+        config MPPT_LCD_INTERVAL_MS
+            int "LCD refresh (ms)"
+            default 1000
+
+        config MPPT_HAP_PUSH_INTERVAL_MS
+            int "HomeKit characteristic push (ms)"
+            default 2000
+
+        config MPPT_ERROR_WINDOW_MS
+            int "Error counter window (ms)"
+            default 1000
+
+        config MPPT_ERROR_COUNT_LIMIT
+            int "Error count limit per window"
+            default 5
+
+        config MPPT_MENU_TIMEOUT_S
+            int "Menu inactivity timeout (s)"
+            default 7
+
+        config MPPT_WH_PERSIST_MINUTES
+            int "Energy counter save interval (min)"
+            default 60
+
+        config MPPT_OTA_AUTOCHECK_S
+            int "Automatic firmware check after Wi-Fi connect (s, 0 = off)"
+            default 60
+
+        config MPPT_TELEMETRY_INTERVAL_MS
+            int "Serial telemetry line interval (ms)"
+            default 1000
+
+    endmenu
+
+    menu "Factory defaults"
+
+        config MPPT_DEF_VBAT_MAX_CV
+            int "Battery max voltage (cV)"
+            default 2730
+
+        config MPPT_DEF_VBAT_MIN_CV
+            int "Battery min voltage (cV)"
+            default 2240
+
+        config MPPT_DEF_CHARGE_CURRENT_CA
+            int "Charging current (cA)"
+            default 3000
+
+        config MPPT_DEF_FAN_TEMP_C
+            int "Fan on temperature (°C)"
+            default 60
+
+        config MPPT_DEF_TEMP_MAX_C
+            int "Shutdown temperature (°C)"
+            default 90
+
+        config MPPT_DEF_ENERGY_PRICE_CENTS
+            int "Energy price (cents per kWh)"
+            default 27
+
+        config MPPT_DEF_TELEMETRY_MODE
+            int "Serial telemetry mode (0 off, 1 all, 2 essential, 3 numbers)"
+            range 0 3
+            default 1
+
+    endmenu
 
 endmenu

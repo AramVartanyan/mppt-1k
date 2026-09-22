@@ -1,0 +1,10 @@
+# ESP-IDF build output
+project/*/build/
+project/*/sdkconfig
+project/*/sdkconfig.old
+project/*/managed_components/
+project/*/dependencies.lock
+
+# Editors / OS
+.vscode/
+.DS_Store

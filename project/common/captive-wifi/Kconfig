@@ -1,0 +1,17 @@
+menu "Captive Wi-Fi"
+
+    config CAPTIVE_WIFI_AP_PASSWORD
+        string "SoftAP password (empty = open network)"
+        default ""
+
+    config CAPTIVE_WIFI_MAX_RETRIES
+        int "Failed connection attempts before the portal starts"
+        range 1 100
+        default 10
+
+    config CAPTIVE_WIFI_PORTAL_TIMEOUT_MIN
+        int "Portal timeout (min, 0 = stay in portal until configured)"
+        range 0 1440
+        default 0
+
+endmenu

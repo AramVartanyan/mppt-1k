@@ -1,0 +1,13 @@
+menu "Container NVS"
+
+config CONTAINER_NVS_PARTITION
+    string "NVS partition label used by container_nvs"
+    default "nvs"
+    help
+        Label of the NVS partition where container_nvs stores its key/value
+        blobs. "nvs" is the standard partition present in the default partition
+        table, so the library works out of the box. Point it at a dedicated
+        partition if you want this storage isolated (e.g. a Matter/CHIP factory
+        namespace partition).
+
+endmenu

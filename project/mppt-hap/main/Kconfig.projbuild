@@ -1,0 +1,64 @@
+menu "Device Settings"
+
+    config USE_HARDCODED_SETUP_CODE
+        bool "Use hard-coded setup code"
+        default n
+        help
+            HomeKit does not recommend having the setup code programmed in the accessory as is.
+            Instead, it expects setup info (salt-verifier pair) generated for the given setup code.
+            Use this option only for testing purposes. For production, the setup info should be
+            used.
+            
+    config SETUP_CODE
+        string "HomeKit Setup Code"
+        default "111-22-333"
+        depends on USE_HARDCODED_SETUP_CODE
+        help
+            Setup code to be used for HomeKit pairing, if hard-coded setup code is enabled.
+
+    config SETUP_ID
+        string "HomeKit Setup Id"
+        default "ES32"
+        depends on USE_HARDCODED_SETUP_CODE
+        help
+            Setup id to be used for HomeKit pairing, if hard-coded setup code is enabled.
+
+    config MANIFACTURER
+        string "Device Manifacturer"
+        default "Armo Ltd."
+        help
+            Insert the name of the Device Manifacturer.
+            
+    config NAME
+        string "Device Name"
+        default "MPPT-%02X%02X%02X"
+        help
+            Insert the name of the Device.
+
+    config MODEL
+        string "Device Model"
+        default "MPPT Solar"
+        help
+            Insert the name of the Device Model.
+            
+    config HW
+        string "Device Hardware"
+        default "0.1.1"
+        help
+            Insert the revision of the Device Hardware.
+
+    config RESET_GPIO
+        int "Reset Button GPIO number"
+        range 0 46
+        default 0
+        help
+            GPIO number for Button Input.
+    
+    config LED_GPIO
+        int "Read ADC1 GPIO number"
+        range 0 42
+        default 2
+        help
+            GPIO 14 number for Temperature sensor 2 or LED indicator.
+
+endmenu

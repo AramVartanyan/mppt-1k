@@ -205,8 +205,18 @@ Behaviour:
    connected.
 6. "Reset WiFi" (menu, or IO0 held 3 s) erases credentials and returns to the portal.
 
-Later (phase 5) the same HTTP server serves a status page with all measurements when the
-device is connected to the home network, which is why Wi-Fi is a setting separate from HAP.
+HTTP server and port 80: the HomeKit SDK runs its own `esp_http_server` instance on port 80
+(`hap_platform_httpd`), and the original `app_wifi` registers its SoftAP provisioning handlers
+on that instance via `hap_platform_httpd_get_handle()`. `captive-wifi` therefore runs its own
+server only while the portal is active (AP mode, HAP not yet started) and stops it before
+`hap_start()`. The later status web page (phase 5) registers its URI handlers on the HAP
+server when HAP is on, and on a `captive-wifi` server when HAP is off, so both never listen on
+port 80 at the same time. Wi-Fi is a setting separate from HAP for this status page.
+
+`app_wifi` facts carried over: `esp_netif_init`, default event loop, STA netif with hostname,
+`WIFI_INIT_CONFIG_DEFAULT`, reconnect on `WIFI_EVENT_STA_DISCONNECTED`, IPv6 link-local,
+`TakeStatusConnected(true/false)` on got-IP / disconnected. Dropped: `wifi_provisioning`
+(deprecated in IDF 5.x), QR code, WAC, hard-coded credentials.
 
 ---
 
@@ -358,10 +368,23 @@ Project code name (CMake project and binary name): **`mppt1hs2`**.
 `partitions_hap.csv`: 4 MB flash, `sec_cert`, `nvs`, `otadata`, `phy_init`, `ota_0` / `ota_1`
 (1600 KB each), `factory_nvs`, `nvs_keys`.
 
-OTA through `fupdateota`, URL `https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin`.
-The firmware version comes from `version.txt` → `PROJECT_VER` → app descriptor, which is also
-what HomeKit reports as Firmware Revision and what the OTA version check compares. An automatic
-check runs 1 minute after Wi-Fi connects; a manual check/update is in Device Setup → FW Update.
+OTA through `fupdateota` (ESP32 path: `esp_https_ota_begin` → image descriptor → version
+compare → download → `esp_https_ota_finish`; the application reboots on
+`FW_UPG_STATUS_SUCCESS`), URL
+`https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin`, certificate bundle
+enabled. The firmware version comes from `version.txt` → `PROJECT_VER` → app descriptor, which
+is also what HomeKit reports as Firmware Revision and what the OTA version check compares
+(`major.minor.patch`, only a strictly newer image is installed). An automatic check runs
+1 minute after Wi-Fi connects; a manual check/update is in Device Setup → FW Update.
+
+Required changes in `fupdateota` (separate repository, own PR):
+
+1. `otaUpdate()` refuses to run while `hap_get_paired_controller_count() == 0`. With HAP
+   disabled this blocks OTA entirely, so the pairing guard becomes optional (Kconfig, default
+   on for HomeKit-only devices, off here) or moves to the caller.
+2. A check-only call (`otaCheckVersion()`: fetch the descriptor, compare, abort without
+   writing) so the menu can show "up to date" / "vX.Y.Z available" and the automatic check
+   does not download an image that is then rejected.
 
 ---
 

@@ -21,6 +21,13 @@ void mppt_hap_push(void);
 
 bool mppt_hap_is_running(void);
 
+/* Remove pairings (accessory id/keys included); the SDK reboots afterwards.
+ * ESP_ERR_INVALID_STATE when HAP is not running. */
+esp_err_t mppt_hap_reset_pairings(void);
+
+/* Paired controller count, 0 when HAP is not running. */
+int mppt_hap_paired_count(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <stdbool.h>
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -13,11 +14,14 @@ extern "C" {
 /* Load persisted counters, reset averaging state. */
 esp_err_t mppt_sensors_init(void);
 
-/* One measurement cycle; updates mppt_state. */
+/* One measurement cycle (about 10 ADS1115 conversions); updates mppt_state. */
 void mppt_sensors_read(void);
 
 /* FUGU resetVariables(): energy and time counters. */
 void mppt_sensors_reset_counters(void);
+
+/* Write the energy counters to NVS now (hourly schedule, sunset, faults). */
+void mppt_sensors_persist(void);
 
 #ifdef __cplusplus
 }

@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <stdint.h>
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -23,11 +24,16 @@ typedef enum {
 /* Buttons (iot_button), LCD splash, UI task. */
 esp_err_t mppt_ui_start(void);
 
-/* Post a button event to the UI task (ISR-safe callbacks call this). */
+/* Post a button event to the UI task. */
 void mppt_ui_button_event(mppt_button_event_t ev);
 
-/* Text shown on the LCD by other modules (portal SSID, OTA progress). */
+/* Transient text over the pages. hold_ms = 0 → sticky until the next message
+ * or any button press. Thread-safe. */
 void mppt_ui_message(const char *line1, const char *line2, uint32_t hold_ms);
+
+/* "Update Firmware? Yes/No" dialog (No selected). Stays until answered.
+ * Ignored when the same version was already declined in this boot. */
+void mppt_ui_ota_offer(const char *version);
 
 #ifdef __cplusplus
 }

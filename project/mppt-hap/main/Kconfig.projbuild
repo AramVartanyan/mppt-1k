@@ -325,6 +325,23 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
             range 1 64
             default 1
 
+        config MPPT_PSU_SHUTDOWN_RAMP_MS
+            int "PSU mode: duty ramp-down time on input under-voltage (ms)"
+            range 0 5000
+            default 100
+            help
+                Controlled ramp to zero duty before the stage is disabled, fast enough
+                for a downstream MCU brown-out detector.
+
+        config MPPT_PSU_RECOVERY_HYST_MV
+            int "PSU mode: input hysteresis above set voltage + dropout to re-enable (mV)"
+            default 1000
+
+        config MPPT_PSU_RECOVERY_S
+            int "PSU mode: seconds the input must stay above the threshold before re-enable"
+            range 0 600
+            default 5
+
     endmenu
 
     menu "NTC thermistors"

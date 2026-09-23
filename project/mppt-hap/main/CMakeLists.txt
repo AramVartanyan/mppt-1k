@@ -9,6 +9,7 @@ idf_component_register(
         "mppt_lcd.c"
         "mppt_telemetry.c"
         "mppt_hap.c"
+        "mppt_system.c"
     INCLUDE_DIRS "."
     REQUIRES
         # ESP-IDF

@@ -8,6 +8,7 @@
 #include "ads1115.h"
 #include "hd44780.h"
 #include "ntc_driver.h"
+#include "esp_wifi.h"
 #include "mppt_config.h"
 #include "mppt_hal.h"
 
@@ -243,7 +244,11 @@ esp_err_t mppt_hal_ntc2_read(float *temp_c)
     if (!s_ntc2) {
         return ESP_ERR_INVALID_STATE;
     }
-    /* TODO(phase 2): return ESP_ERR_INVALID_STATE while Wi-Fi is active (ADC2). */
+    /* ADC2 is shared with the Wi-Fi radio on ESP32-S2: TH2 only while Wi-Fi is off */
+    wifi_mode_t mode;
+    if (esp_wifi_get_mode(&mode) == ESP_OK && mode != WIFI_MODE_NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
     return ntc_dev_get_temperature(s_ntc2, temp_c);
 }
 

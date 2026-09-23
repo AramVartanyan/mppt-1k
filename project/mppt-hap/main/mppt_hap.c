@@ -32,3 +32,16 @@ bool mppt_hap_is_running(void)
 {
     return s_running;
 }
+
+esp_err_t mppt_hap_reset_pairings(void)
+{
+    if (!s_running) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return hap_reset_pairings() == HAP_SUCCESS ? ESP_OK : ESP_FAIL;
+}
+
+int mppt_hap_paired_count(void)
+{
+    return s_running ? hap_get_paired_controller_count() : 0;
+}

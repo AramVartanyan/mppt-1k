@@ -8,9 +8,9 @@ The charging logic is a port of Angelo Casimiro's
 (V1.10, CC0 1.0 / public domain) from Arduino/ESP32 to ESP-IDF/ESP32-S2, running on the
 **MPPT32 v1.1** board (`files/Schematic_MPPT32_2026-09-22.pdf`).
 
-> **Status: phase 1 (infrastructure) done.** This document is the agreed specification.
-> The project builds for `esp32s2` on ESP-IDF v5.5.4 with module skeletons; measurement,
-> control, UI, connectivity and HomeKit follow in phases 2–5 (section 7).
+> **Status: phase 2 (measurement and UI) done, untested on hardware.** This document is the
+> agreed specification. The project builds for `esp32s2` on ESP-IDF v5.5.4; control,
+> connectivity and HomeKit follow in phases 3–5 (section 7).
 
 ---
 
@@ -138,7 +138,7 @@ idf.py set-target esp32s2
 idf.py build flash monitor
 ```
 
-Phase 1 image: 752 KB of the 1600 KB OTA slot.
+Phase 2 image: 1000 KB of the 1600 KB OTA slot (HomeKit SDK included).
 
 ### 2.2 Source layout (`project/mppt-hap/main`)
 
@@ -156,6 +156,7 @@ Phase 1 image: 752 KB of the 1600 KB OTA slot.
 | `mppt_telemetry.c/.h` | periodic log line (`ESP_LOGI`) | `6_Onboard_Telemetry.ino` |
 | `mppt_hap.c/.h` | HomeKit services, started only when enabled | replaces `7_Wireless_Telemetry.ino` (Blynk) |
 | `mppt_state.c/.h` | shared state implementation (mutex) | globals |
+| `mppt_system.c/.h` | reboot, Wi-Fi reset, HAP reset, factory reset (shared by IO0 and the menu) | — |
 | `project/common/captive-wifi` | Wi-Fi STA + captive portal component (2.6) | `setupWiFi()` |
 
 ### 2.3 Tasks (single core)
@@ -372,9 +373,12 @@ Rules:
 Display pages (from FUGU): 1 power + energy + SOC + Vout + Iout; 2 input and output V/A;
 3 energy + SOC bar graph; 4 temperature + fan; 5 energy savings (kWh × price).
 
-Menu items: FUGU's settings (charging mode, output mode, battery max/min, charging current,
-fan, fan temperature, shutdown temperature, backlight sleep, counter reset, save/autoload) plus
-battery preset and energy price, and a **Device Setup** sub-menu:
+Main menu (values shown on the same line, e.g. `>4 BatMax   27.3V`): 1 Battery (preset),
+2 OutMode (Chrg/PSU), 3 Algo (MPPT/CC-CV), 4 BatMax or OutVolt, 5 BatMin, 6 Current,
+7 Charging, 8 Fan, 9 FanTemp, 10 MaxTemp, 11 Backlt, 12 BLsleep, 13 CntRst (auto reset
+period), 14 Price, 15 Telem (0–3), 16 Reset counters, 17 Device Setup, 18 Exit. Settings are
+saved when an edit is confirmed. FUGU's separate save/autoload items are not needed: every
+confirmed edit is persisted. The **Device Setup** sub-menu:
 
 | # | Item | Behaviour |
 |---|---|---|
@@ -464,9 +468,10 @@ Each phase is reviewed and approved before the next starts.
 1. **Infrastructure** (done) — `esp32s2` target, `sdkconfig.defaults`, Kconfig with MPPT32
    pins, CMake and `idf_component.yml`, ported `ads1115`, module skeletons with the module
    APIs, `captive-wifi` STA part, `app_main` boot order. Builds; buck disabled.
-2. **Measurement and UI** — `mppt_sensors`, LCD pages, numbered menu with Device Setup,
-   settings editing, counter persistence, OTA prompt, reset semantics, TH2 gated by Wi-Fi.
-   Tested from USB power without the power stage.
+2. **Measurement and UI** (done, hardware test pending) — `mppt_sensors` port, LCD pages,
+   numbered menu with Device Setup, settings editing, counter persistence, OTA prompt and
+   automatic check, reset semantics in `mppt_system`, TH2 gated by Wi-Fi. To be tested from
+   USB power without the power stage.
 3. **Control** — `mppt_control`: protection and charging algorithm. First tests with a
    laboratory PSU instead of a panel, then PV.
 4. **Connectivity** — `captive-wifi` component, Device Setup menu, OTA check; then

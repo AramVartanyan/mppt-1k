@@ -1,13 +1,25 @@
-#ifdef __cplusplus
-extern "C" {
-#endif
+/*
+ * ADS1115 16-bit I2C ADC driver for ESP-IDF.
+ *
+ * Based on esp32-ads1115 by Blake Felt (Molorius), ported to the ESP-IDF 5.x
+ * driver/i2c_master API. The public API is unchanged except for
+ * ads1115_config(), which now takes an i2c_master bus handle instead of a
+ * legacy i2c_port_t.
+ */
 
 #ifndef ADS1115_H
 #define ADS1115_H
 
-#include <stdio.h>
-#include "driver/i2c.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "driver/i2c_master.h"
 #include "driver/gpio.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum { // register address
   ADS1115_CONVERSION_REGISTER_ADDR = 0,
@@ -69,23 +81,28 @@ typedef union { // configuration register
 } ADS1115_CONFIG_REGISTER_Type;
 
 typedef struct {
-  bool in_use; // gpio is used
-  gpio_num_t pin; // ready pin
-  xQueueHandle gpio_evt_queue; // pin triggered queue
+  bool in_use;                 // gpio is used
+  gpio_num_t pin;              // ready pin
+  QueueHandle_t gpio_evt_queue; // pin triggered queue
 } ads1115_rdy_pin_t;
 
 typedef struct {
   ADS1115_CONFIG_REGISTER_Type config;
-  i2c_port_t i2c_port;
+  i2c_master_dev_handle_t dev;   // device handle on the i2c_master bus
   int address;
   ads1115_rdy_pin_t rdy_pin;
   ads1115_register_addresses_t last_reg; // save last accessed register
-  bool changed; // save if a value was changed or not
-  TickType_t max_ticks; // maximum wait ticks for i2c bus
+  bool changed;                // save if a value was changed or not
+  int timeout_ms;              // maximum wait for an i2c transaction
 } ads1115_t;
 
-// initialize device
-ads1115_t ads1115_config(i2c_port_t i2c_port, uint8_t address); // set up configuration
+/* Initialize device: adds the ADS1115 at `address` to an already created
+ * i2c_master bus and returns the default configuration (single-shot, ±4.096 V,
+ * 64 SPS, AIN0-GND). On failure `dev` is NULL and every read returns 0. */
+ads1115_t ads1115_config(i2c_master_bus_handle_t bus, uint8_t address);
+
+/* Remove the device from the bus (does not delete the bus). */
+void ads1115_delete(ads1115_t* ads);
 
 // set configuration
 void ads1115_set_rdy_pin(ads1115_t* ads, gpio_num_t gpio); // set up data-ready pin
@@ -98,8 +115,8 @@ void ads1115_set_max_ticks(ads1115_t* ads, TickType_t max_ticks); // maximum wai
 int16_t ads1115_get_raw(ads1115_t* ads); // get voltage in bits
 double ads1115_get_voltage(ads1115_t* ads); // get voltage in volts
 
-#endif // ifdef ADS1115_H
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif // ifdef ADS1115_H

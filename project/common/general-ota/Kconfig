@@ -1,0 +1,26 @@
+menu "General OTA"
+
+    config GENERAL_OTA_URL
+        string "Firmware image URL (https)"
+        default "https://raw.githubusercontent.com/AramVartanyan/otafw/master/project.bin"
+        help
+            Server certificates are verified against the mbedTLS certificate bundle,
+            so CONFIG_MBEDTLS_CERTIFICATE_BUNDLE must be enabled.
+
+    config GENERAL_OTA_RECV_TIMEOUT_MS
+        int "HTTP receive timeout (ms)"
+        range 1000 60000
+        default 5000
+
+    config GENERAL_OTA_SKIP_COMMON_NAME_CHECK
+        bool "Skip server certificate CN check"
+        default n
+
+    config GENERAL_OTA_REBOOT_DELAY_MS
+        int "Delay before the automatic reboot after a successful update (ms)"
+        range 0 60000
+        default 3000
+        help
+            Only used when general_ota_config_t.auto_reboot is set.
+
+endmenu

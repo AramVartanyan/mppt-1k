@@ -6,11 +6,14 @@
  *  - QueueHandle_t (xQueueHandle was removed in IDF 5)
  *  - RDY pin: 64-bit pin mask (GPIO >= 32), GPIO_INTR_NEGEDGE, ISR handler
  *    installed once, bounded wait instead of portMAX_DELAY, yield from ISR
+ *  - conversion end confirmed with the OS bit before the result is read
  */
 
 #include "ads1115.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "esp_rom_sys.h"
 
 static const char* TAG = "ads1115";
 
@@ -107,17 +110,13 @@ void ads1115_set_rdy_pin(ads1115_t* ads, gpio_num_t gpio) {
   gpio_config(&io_conf); // set gpio configuration
 
   ads->rdy_pin.gpio_evt_queue = xQueueCreate(1, sizeof(bool));
-  // The GPIO ISR service is shared with other components (buttons, ...): add
-  // the handler first and install the service only if nobody has done it yet.
-  // IDF logs an error for whichever call fails, so this order is quiet in the
-  // usual case where the service is already installed.
-  esp_err_t err = gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
-  if (err == ESP_ERR_INVALID_STATE) {
-    err = gpio_install_isr_service(0);
-    if (err == ESP_OK) {
-      err = gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
-    }
+  // The GPIO ISR service is shared with other components; ESP_ERR_INVALID_STATE
+  // means it is already installed, which is fine.
+  esp_err_t err = gpio_install_isr_service(0);
+  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+    ESP_LOGE(TAG, "gpio_install_isr_service: %s", esp_err_to_name(err));
   }
+  err = gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "RDY pin interrupt: %s", esp_err_to_name(err));
   }
@@ -177,12 +176,39 @@ int16_t ads1115_get_raw(ads1115_t* ads) {
   }
 
   if (ads->rdy_pin.in_use) {
-    // bounded wait: twice the conversion time plus margin, never forever
-    if (xQueueReceive(ads->rdy_pin.gpio_evt_queue, &tmp, pdMS_TO_TICKS(2 * conv_ms + 10)) != pdTRUE) {
-      ESP_LOGW(TAG, "RDY timeout, reading anyway");
+    // bounded wait: twice the conversion time plus margin, at least two ticks
+    TickType_t wait = pdMS_TO_TICKS(2 * conv_ms + 10);
+    if (wait < 2) wait = 2;
+    if (xQueueReceive(ads->rdy_pin.gpio_evt_queue, &tmp, wait) != pdTRUE) {
+      // The OS bit check below still guarantees a fresh result. Report a
+      // missing RDY edge once so a wiring or configuration fault stays
+      // visible; the first conversion after power-up may miss it, so wait
+      // for a second miss.
+      static uint8_t misses;
+      if (misses < 2 && ++misses == 2) {
+        ESP_LOGW(TAG, "RDY pin GPIO%d did not signal end of conversion, using OS bit polling", ads->rdy_pin.pin);
+      }
     }
   } else {
     vTaskDelay(pdMS_TO_TICKS(conv_ms) + 1);
+  }
+
+  // In single-shot mode the device ignores a start request while a conversion
+  // is running, so reading before the end returns the previous channel. Confirm
+  // completion with the OS bit (1 = idle) before reading the result.
+  if (ads->config.bit.MODE == ADS1115_MODE_SINGLE) {
+    const int64_t deadline = esp_timer_get_time() + (int64_t)(4 * conv_ms + 10) * 1000;
+    for (;;) {
+      uint8_t c[2];
+      if (ads1115_read_register(ads, ADS1115_CONFIG_REGISTER_ADDR, c, 2) == ESP_OK && (c[0] & 0x80)) {
+        break; // OS bit (bit 15) set: no conversion in progress
+      }
+      if (esp_timer_get_time() > deadline) {
+        ESP_LOGW(TAG, "conversion not complete, reading anyway");
+        break;
+      }
+      esp_rom_delay_us(100);
+    }
   }
 
   err = ads1115_read_register(ads, ADS1115_CONVERSION_REGISTER_ADDR, data, len);

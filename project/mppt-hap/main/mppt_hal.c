@@ -120,7 +120,9 @@ static esp_err_t bus_init(i2c_port_num_t port, int sda, int scl, i2c_master_bus_
         .scl_io_num = scl,
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = false,  /* 10 kΩ pull-ups on the board */
+        /* Board has 10 kΩ pull-ups; the internal ones (~45 kΩ) are added so a
+         * bus rewired to spare pins without resistors still idles high. */
+        .flags.enable_internal_pullup = true,
     };
     return i2c_new_master_bus(&cfg, out);
 }

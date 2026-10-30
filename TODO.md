@@ -17,13 +17,12 @@ once done.
     to `SD#` the same way.
 - **TH2** is on IO14 (ADC2), which is unreliable while Wi-Fi is on. Move it to
   an ADC1 pin (GPIO1–10).
-- **R27** (0 Ω, TH1 to IO1) as a backup path for the temperature reading:
-  confirm whether it is fitted and whether the firmware should use it.
+- **R27** (0 Ω, TH1 node to ADS1115 AIN1) must be fitted, otherwise AIN1
+  floats and TH1 reads about −5 °C. TH1 is also wired directly to IO1
+  (ADC1_CH0), which could serve as a backup reading.
 
 ## Calibration
 
-- Measure the NTC (TH1) R25 and B and enter them (Beta formula; defaults for
-  now).
 - L8 parameters.
 - ACS712 midpoint auto-calibration: guard against calibrating while current
   flows.

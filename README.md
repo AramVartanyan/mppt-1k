@@ -77,10 +77,13 @@ sensor cycle (3+3+4 conversions as in FUGU) takes about 15 ms.
 ### 1.3 Thermistors
 
 Both TH1 and TH2 are 3V3 → NTC → node → 10 kΩ → GND (`CIRCUIT_MODE_NTC_VCC` in
-`espressif/ntc_driver` terms). Default parameters until calibrated by measurement:
-R25 = 10 kΩ, B = 3950, R_fixed = 10 kΩ, Vdd = 3300 mV.
+`espressif/ntc_driver` terms). The fitted NTC is a Semitec 103AT-11:
+R25 = 10 kΩ ±1 %, B25/85 = 3435 K ±1 %; with R_fixed = 10 kΩ and Vdd = 3300 mV.
+Against the Semitec resistance table the Beta formula with B = 3435 is within
+0.6 °C from 0 to 100 °C (1.1 °C at 0 °C), so no Steinhart-Hart fit is needed.
 
 - **TH1 is the primary sensor**, read through ADS1115 AIN1 (16-bit, independent of Wi-Fi).
+  AIN1 is connected to the TH1 node only through R27 (0 Ω); without R27 the input floats.
 - **TH2 is redundant**, read through IO14 (ADC2) with `ntc_driver`, only while Wi-Fi is off.
 
 ### 1.4 Power for bench testing

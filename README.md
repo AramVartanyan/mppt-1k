@@ -46,7 +46,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | PWR12 | IO4 | in | LM5164 PGOOD (open drain, R26 10 kΩ pull-up): high = 12 V rail OK. EN/UVLO is tied to VIN, the rail is always enabled |
 | SDA1 / SCL1 | IO35 / IO36 | I2C bus 0 | ADS1115 (10 kΩ pull-ups to 3.3 V) |
 | SDA2 / SCL2 | IO9 / IO10 | I2C bus 1 | LCD PCF8574 (10 kΩ pull-ups to 3.3 V, LCD powered from 5 V) |
-| SDA2 / SCL2 (rework) | IO16 / IO17 | I2C bus 1 | first prototype only: IO9 and IO10 are shorted on the board, so the LCD SDA/SCL are wired straight to IO16/IO17 (module pins 9/10, neighbours IO15 and IO18 unused, so a solder bridge is harmless), not through T4; set in menuconfig (`Bus 1 SDA/SCL`). Internal pull-ups are enabled on both buses. Avoid IO34 (next to strapping pin IO45) |
+| SDA2 / SCL2 (temporary) | IO16 / IO17 | I2C bus 1 | **temporary, test board only.** The hardware is designed for IO9/IO10 and those stay the firmware defaults. On the first prototype IO9 and IO10 are shorted, so for bench tests the LCD SDA/SCL are wired straight to IO16/IO17 (module pins 9/10; neighbours IO15 and IO18 unused, so a solder bridge is harmless), not through T4, and selected only in that board's menuconfig (`Bus 1 SDA/SCL`). Avoid IO34 (next to strapping pin IO45). Internal pull-ups are enabled on both buses |
 | READ | IO39 | in | ADS1115 ALERT/RDY (10 kΩ pull-up) |
 | ADC0 | IO1 | ADC1_CH0 | TH1 (also wired to ADS1115 AIN1 through R27 0 Ω) |
 | ADC1 | IO14 | ADC2_CH3 | TH2 (ADC2 is not usable while Wi-Fi is active on ESP32-S2) |

@@ -5,7 +5,7 @@
  *  - driver/i2c_master transactions instead of the legacy i2c_cmd_link API
  *  - QueueHandle_t (xQueueHandle was removed in IDF 5)
  *  - RDY pin: 64-bit pin mask (GPIO >= 32), GPIO_INTR_NEGEDGE, ISR handler
- *    installed once, bounded wait instead of portMAX_DELAY
+ *    installed once, bounded wait instead of portMAX_DELAY, yield from ISR
  */
 
 #include "ads1115.h"
@@ -17,7 +17,12 @@ static const char* TAG = "ads1115";
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
   const bool ret = 1; // dummy value to pass to queue
   QueueHandle_t gpio_evt_queue = (QueueHandle_t) arg; // find which queue to write
-  xQueueSendFromISR(gpio_evt_queue, &ret, NULL);
+  BaseType_t woken = pdFALSE;
+  xQueueSendFromISR(gpio_evt_queue, &ret, &woken);
+  // switch to the waiting task now instead of at the next tick
+  if (woken == pdTRUE) {
+    portYIELD_FROM_ISR();
+  }
 }
 
 static esp_err_t ads1115_write_register(ads1115_t* ads, ads1115_register_addresses_t reg, uint16_t data) {
@@ -102,11 +107,20 @@ void ads1115_set_rdy_pin(ads1115_t* ads, gpio_num_t gpio) {
   gpio_config(&io_conf); // set gpio configuration
 
   ads->rdy_pin.gpio_evt_queue = xQueueCreate(1, sizeof(bool));
-  esp_err_t err = gpio_install_isr_service(0);
-  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-    ESP_LOGE(TAG, "gpio_install_isr_service: %s", esp_err_to_name(err));
+  // The GPIO ISR service is shared with other components (buttons, ...): add
+  // the handler first and install the service only if nobody has done it yet.
+  // IDF logs an error for whichever call fails, so this order is quiet in the
+  // usual case where the service is already installed.
+  esp_err_t err = gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
+  if (err == ESP_ERR_INVALID_STATE) {
+    err = gpio_install_isr_service(0);
+    if (err == ESP_OK) {
+      err = gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
+    }
   }
-  gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "RDY pin interrupt: %s", esp_err_to_name(err));
+  }
 
   ads->rdy_pin.in_use = 1;
   ads->rdy_pin.pin = gpio;

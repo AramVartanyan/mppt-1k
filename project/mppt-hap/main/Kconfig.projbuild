@@ -197,6 +197,10 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
             range 0x20 0x3F
             default 0x27
             depends on MPPT_LCD_ENABLE
+            help
+                PCF8574 uses 0x20-0x27, PCF8574A uses 0x38-0x3F. A0-A2 open
+                (pulled high) gives 0x27 or 0x3F. If nothing answers here,
+                the firmware probes both ranges and logs the address found.
 
         config MPPT_LCD_PIN_RS
             int "PCF8574 bit: RS"

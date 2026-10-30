@@ -356,7 +356,9 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
 
         config MPPT_NTC_BETA
             int "NTC beta (K)"
-            default 3950
+            default 3435
+            help
+                B25/85 of the fitted Semitec 103AT-11.
 
         config MPPT_NTC_RFIXED_OHM
             int "Fixed divider resistor (Ω)"

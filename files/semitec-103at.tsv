@@ -1,0 +1,37 @@
+# Semitec 103AT NTC thermistor (R25 = 10 kOhm, B25/85 = 3435 K), resistance table
+# Values from the Semitec AT series datasheet, as extracted in
+# https://github.com/wwaites/thermo/blob/master/semitec-103at.tsv
+# temperature_C	resistance_kOhm
+-50	329.5
+-45	247.7
+-40	188.5
+-35	144.1
+-30	111.3
+-25	86.43
+-20	67.77
+-15	53.41
+-10	42.47
+-5	33.90
+0	27.28
+5	22.05
+10	17.96
+15	14.69
+20	12.09
+25	10.00
+30	8.313
+35	6.940
+40	5.827
+45	4.911
+50	4.160
+55	3.536
+60	3.020
+65	2.588
+70	2.228
+75	1.924
+80	1.668
+85	1.451
+90	1.266
+95	1.108
+100	0.9731
+105	0.8572
+110	0.7576

@@ -94,7 +94,7 @@ ads1115_t ads1115_config(i2c_master_bus_handle_t bus, uint8_t address) {
   ads.rdy_pin.in_use = 0; // state that rdy_pin not used
   ads.last_reg = ADS1115_MAX_REGISTER_ADDR; // say that we accessed invalid register last
   ads.changed = 1; // say we changed the configuration
-  ads.timeout_ms = 10;
+  ads.timeout_ms = 50; // several ticks at 100 Hz: a one-tick wait can expire almost at once
 
   i2c_device_config_t dev_cfg = {
     .dev_addr_length = I2C_ADDR_BIT_LEN_7,

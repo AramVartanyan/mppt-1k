@@ -151,8 +151,14 @@ esp_err_t mppt_hal_ads_read(uint8_t channel, float *volts)
         return ESP_ERR_INVALID_STATE;
     }
     ads1115_set_mux(&s_ads, (ads1115_mux_t)(ADS1115_MUX_0_GND + channel));
-    *volts = (float)ads1115_get_voltage(&s_ads);
-    return ESP_OK;
+    /* A failed conversion is reported, not returned as 0 V: the sensor code
+     * skips that sample instead of averaging it in. */
+    double v;
+    esp_err_t err = ads1115_read_voltage(&s_ads, &v);
+    if (err == ESP_OK) {
+        *volts = (float)v;
+    }
+    return err;
 }
 
 /* ------------------------------------------------------------------- LCD */

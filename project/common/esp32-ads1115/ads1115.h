@@ -88,7 +88,9 @@ typedef struct {
 
 typedef struct {
   ADS1115_CONFIG_REGISTER_Type config;
+  i2c_master_bus_handle_t bus;   // bus the device sits on (reset on errors)
   i2c_master_dev_handle_t dev;   // device handle on the i2c_master bus
+  bool bus_error;              // last transaction failed (logged once)
   int address;
   ads1115_rdy_pin_t rdy_pin;
   ads1115_register_addresses_t last_reg; // save last accessed register
@@ -112,8 +114,13 @@ void ads1115_set_mode(ads1115_t* ads, ads1115_mode_t mode); // set read mode
 void ads1115_set_sps(ads1115_t* ads, ads1115_sps_t sps); // set sampling speed
 void ads1115_set_max_ticks(ads1115_t* ads, TickType_t max_ticks); // maximum wait ticks for i2c bus
 
-int16_t ads1115_get_raw(ads1115_t* ads); // get voltage in bits
-double ads1115_get_voltage(ads1115_t* ads); // get voltage in volts
+int16_t ads1115_get_raw(ads1115_t* ads); // get voltage in bits (0 on error)
+double ads1115_get_voltage(ads1115_t* ads); // get voltage in volts (0 on error)
+
+/* Same as ads1115_get_raw / ads1115_get_voltage but report I2C errors, so a
+ * failed conversion is not mistaken for 0 V. */
+esp_err_t ads1115_read_raw(ads1115_t* ads, int16_t* raw);
+esp_err_t ads1115_read_voltage(ads1115_t* ads, double* volts);
 
 #ifdef __cplusplus
 }

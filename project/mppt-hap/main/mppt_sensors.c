@@ -118,12 +118,12 @@ void mppt_sensors_read(void)
 
     /* ---- voltage sensors: instantaneous averaging ---- */
     for (int i = 0; i < MPPT_CAL_AVG_VOLTAGE; i++) {
-        if (mppt_hal_ads_read(MPPT_ADS_CH_VIN, &v) == ESP_OK) {
-            vsi += v;
-            if (mppt_hal_ads_read(MPPT_ADS_CH_VOUT, &v) == ESP_OK) {
-                vso += v;
-                nv++;
-            }
+        float vi, vo;
+        if (mppt_hal_ads_read(MPPT_ADS_CH_VIN, &vi) == ESP_OK &&
+            mppt_hal_ads_read(MPPT_ADS_CH_VOUT, &vo) == ESP_OK) {
+            vsi += vi;              /* only complete pairs are averaged */
+            vso += vo;
+            nv++;
         }
     }
     /* ---- current sensor ---- */

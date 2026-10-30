@@ -7,6 +7,8 @@
  *  - RDY pin: 64-bit pin mask (GPIO >= 32), GPIO_INTR_NEGEDGE, ISR handler
  *    installed once, bounded wait instead of portMAX_DELAY, yield from ISR
  *  - conversion end confirmed with the OS bit before the result is read
+ *  - register reads always send the pointer; bus reset after an I2C error
+ *  - read_raw / read_voltage report errors instead of returning 0
  */
 
 #include "ads1115.h"
@@ -28,6 +30,28 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
   }
 }
 
+/* After a failed transaction the i2c_master driver can stay in an error
+ * state; reset the bus so the next transaction starts clean. Log only the
+ * first failure and the recovery, not every retry. */
+static void ads1115_on_result(ads1115_t* ads, esp_err_t ret, const char* what) {
+  if (ret == ESP_OK) {
+    if (ads->bus_error) {
+      ads->bus_error = false;
+      ESP_LOGI(TAG, "I2C communication restored");
+    }
+    return;
+  }
+  if (!ads->bus_error) {
+    ads->bus_error = true;
+    ESP_LOGE(TAG, "%s failed: %s, resetting the bus", what, esp_err_to_name(ret));
+  }
+  if (ads->bus) {
+    i2c_master_bus_reset(ads->bus);
+  }
+  ads->last_reg = ADS1115_MAX_REGISTER_ADDR; // pointer register state unknown
+  ads->changed = 1;                          // rewrite the configuration
+}
+
 static esp_err_t ads1115_write_register(ads1115_t* ads, ads1115_register_addresses_t reg, uint16_t data) {
   if (ads->dev == NULL) return ESP_ERR_INVALID_STATE;
   uint8_t out[3];
@@ -36,19 +60,20 @@ static esp_err_t ads1115_write_register(ads1115_t* ads, ads1115_register_address
   out[2] = data & 0xFF;       // 8 lower bits
   esp_err_t ret = i2c_master_transmit(ads->dev, out, sizeof(out), ads->timeout_ms);
   ads->last_reg = reg; // change the internally saved register
+  ads1115_on_result(ads, ret, "write");
   return ret;
 }
 
+/* Always send the register pointer and read in one transaction (repeated
+ * start), as the Adafruit library used by FUGU does. Plain reads that rely
+ * on the previously set pointer are not used. */
 static esp_err_t ads1115_read_register(ads1115_t* ads, ads1115_register_addresses_t reg, uint8_t* data, uint8_t len) {
   if (ads->dev == NULL) return ESP_ERR_INVALID_STATE;
-  esp_err_t ret;
-  if (ads->last_reg != reg) { // if we're not on the correct register, change it
-    uint8_t r = (uint8_t)reg;
-    ret = i2c_master_transmit_receive(ads->dev, &r, 1, data, len, ads->timeout_ms);
-    if (ret == ESP_OK) ads->last_reg = reg;
-    return ret;
-  }
-  return i2c_master_receive(ads->dev, data, len, ads->timeout_ms);
+  uint8_t r = (uint8_t)reg;
+  esp_err_t ret = i2c_master_transmit_receive(ads->dev, &r, 1, data, len, ads->timeout_ms);
+  if (ret == ESP_OK) ads->last_reg = reg;
+  ads1115_on_result(ads, ret, "read");
+  return ret;
 }
 
 ads1115_t ads1115_config(i2c_master_bus_handle_t bus, uint8_t address) {
@@ -64,6 +89,8 @@ ads1115_t ads1115_config(i2c_master_bus_handle_t bus, uint8_t address) {
   ads.config.bit.COMP_QUE = 0b11;
 
   ads.address = address; // save i2c address
+  ads.bus = bus;
+  ads.bus_error = false;
   ads.rdy_pin.in_use = 0; // state that rdy_pin not used
   ads.last_reg = ADS1115_MAX_REGISTER_ADDR; // say that we accessed invalid register last
   ads.changed = 1; // say we changed the configuration
@@ -152,7 +179,7 @@ void ads1115_set_max_ticks(ads1115_t* ads, TickType_t max_ticks) {
   if (ads->timeout_ms < 1) ads->timeout_ms = 1;
 }
 
-int16_t ads1115_get_raw(ads1115_t* ads) {
+esp_err_t ads1115_read_raw(ads1115_t* ads, int16_t* raw) {
   const static uint16_t sps[] = {8, 16, 32, 64, 128, 250, 475, 860};
   const static uint8_t len = 2;
   uint8_t data[2];
@@ -169,8 +196,7 @@ int16_t ads1115_get_raw(ads1115_t* ads) {
   if ((ads->config.bit.MODE == ADS1115_MODE_SINGLE) || (ads->changed)) { // if it's single-ended or a setting changed
     err = ads1115_write_register(ads, ADS1115_CONFIG_REGISTER_ADDR, ads->config.reg);
     if (err) {
-      ESP_LOGE(TAG, "could not write to device: %s", esp_err_to_name(err));
-      return 0;
+      return err;
     }
     ads->changed = 0; // say that the data is unchanged now
   }
@@ -200,12 +226,16 @@ int16_t ads1115_get_raw(ads1115_t* ads) {
     const int64_t deadline = esp_timer_get_time() + (int64_t)(4 * conv_ms + 10) * 1000;
     for (;;) {
       uint8_t c[2];
-      if (ads1115_read_register(ads, ADS1115_CONFIG_REGISTER_ADDR, c, 2) == ESP_OK && (c[0] & 0x80)) {
+      err = ads1115_read_register(ads, ADS1115_CONFIG_REGISTER_ADDR, c, 2);
+      if (err != ESP_OK) {
+        return err;
+      }
+      if (c[0] & 0x80) {
         break; // OS bit (bit 15) set: no conversion in progress
       }
       if (esp_timer_get_time() > deadline) {
-        ESP_LOGW(TAG, "conversion not complete, reading anyway");
-        break;
+        // reading now would return the previous channel
+        return ESP_ERR_TIMEOUT;
       }
       esp_rom_delay_us(100);
     }
@@ -213,17 +243,31 @@ int16_t ads1115_get_raw(ads1115_t* ads) {
 
   err = ads1115_read_register(ads, ADS1115_CONVERSION_REGISTER_ADDR, data, len);
   if (err) {
-    ESP_LOGE(TAG, "could not read from device: %s", esp_err_to_name(err));
-    return 0;
+    return err;
   }
-  return (int16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
+  *raw = (int16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
+  return ESP_OK;
 }
 
-double ads1115_get_voltage(ads1115_t* ads) {
+int16_t ads1115_get_raw(ads1115_t* ads) {
+  int16_t raw = 0;
+  return ads1115_read_raw(ads, &raw) == ESP_OK ? raw : 0;
+}
+
+
+esp_err_t ads1115_read_voltage(ads1115_t* ads, double* volts) {
   const double fsr[] = {6.144, 4.096, 2.048, 1.024, 0.512, 0.256};
   const int16_t bits = (1L << 15) - 1;
   int16_t raw;
+  esp_err_t err = ads1115_read_raw(ads, &raw);
+  if (err != ESP_OK) {
+    return err;
+  }
+  *volts = (double)raw * fsr[ads->config.bit.PGA] / (double)bits;
+  return ESP_OK;
+}
 
-  raw = ads1115_get_raw(ads);
-  return (double)raw * fsr[ads->config.bit.PGA] / (double)bits;
+double ads1115_get_voltage(ads1115_t* ads) {
+  double v = 0;
+  return ads1115_read_voltage(ads, &v) == ESP_OK ? v : 0;
 }

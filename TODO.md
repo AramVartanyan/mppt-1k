@@ -35,7 +35,4 @@ once done.
 - Phase 4: captive portal and HomeKit accessory; test the fan HomeKit service.
 - OTA, before the unit goes into its enclosure.
 - USB CDC console.
-- `button` library: `gpio_install_isr_service` without a check logs
-  "GPIO isr service already installed" (check whether the fixed version is in
-  use).
 - LCD and menu: test once the display wiring is fixed.

@@ -204,13 +204,16 @@ void app_main(void)
     const esp_timer_create_args_t targs = { .callback = ota_timer_cb, .name = "ota_auto" };
     esp_timer_create(&targs, &s_ota_timer);
 
+    /* The button library installs the GPIO ISR service on its first button
+     * and has no way to know that someone else already did, so it must run
+     * before the ADS1115 RDY interrupt is set up in mppt_hal_init(). */
+    reset_key_init(MPPT_GPIO_RESET);
     ESP_ERROR_CHECK(mppt_hal_init());
     mppt_sensors_init();
 
     /* 4. tasks */
     ESP_ERROR_CHECK(mppt_control_start());
     ESP_ERROR_CHECK(mppt_ui_start());
-    reset_key_init(MPPT_GPIO_RESET);
 
     /* 5. connectivity */
     if (cfg.wifi_enabled) {

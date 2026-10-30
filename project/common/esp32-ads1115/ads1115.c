@@ -5,7 +5,7 @@
  *  - driver/i2c_master transactions instead of the legacy i2c_cmd_link API
  *  - QueueHandle_t (xQueueHandle was removed in IDF 5)
  *  - RDY pin: 64-bit pin mask (GPIO >= 32), GPIO_INTR_NEGEDGE, ISR handler
- *    installed once, bounded wait instead of portMAX_DELAY, yield from ISR
+ *    added to a shared ISR service, bounded wait instead of portMAX_DELAY, yield from ISR
  *  - conversion end confirmed with the OS bit before the result is read
  *  - register reads always send the pointer; bus reset after an I2C error
  *  - read_raw / read_voltage report errors instead of returning 0
@@ -137,13 +137,17 @@ void ads1115_set_rdy_pin(ads1115_t* ads, gpio_num_t gpio) {
   gpio_config(&io_conf); // set gpio configuration
 
   ads->rdy_pin.gpio_evt_queue = xQueueCreate(1, sizeof(bool));
-  // The GPIO ISR service is shared with other components; ESP_ERR_INVALID_STATE
-  // means it is already installed, which is fine.
-  esp_err_t err = gpio_install_isr_service(0);
-  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-    ESP_LOGE(TAG, "gpio_install_isr_service: %s", esp_err_to_name(err));
+  // The GPIO ISR service is shared with other components, and installing it
+  // a second time makes the GPIO driver log an error. Use the service if it
+  // is already installed; install it only when adding the handler fails.
+  esp_err_t err = gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
+  if (err == ESP_ERR_INVALID_STATE) {
+    err = gpio_install_isr_service(0);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "gpio_install_isr_service: %s", esp_err_to_name(err));
+    }
+    err = gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
   }
-  err = gpio_isr_handler_add(gpio, gpio_isr_handler, (void*)ads->rdy_pin.gpio_evt_queue);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "RDY pin interrupt: %s", esp_err_to_name(err));
   }

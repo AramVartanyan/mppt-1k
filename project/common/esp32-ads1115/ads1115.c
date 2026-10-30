@@ -179,7 +179,16 @@ int16_t ads1115_get_raw(ads1115_t* ads) {
     // bounded wait: twice the conversion time plus margin, at least two ticks
     TickType_t wait = pdMS_TO_TICKS(2 * conv_ms + 10);
     if (wait < 2) wait = 2;
-    (void)xQueueReceive(ads->rdy_pin.gpio_evt_queue, &tmp, wait);
+    if (xQueueReceive(ads->rdy_pin.gpio_evt_queue, &tmp, wait) != pdTRUE) {
+      // The OS bit check below still guarantees a fresh result. Report a
+      // missing RDY edge once so a wiring or configuration fault stays
+      // visible; the first conversion after power-up may miss it, so wait
+      // for a second miss.
+      static uint8_t misses;
+      if (misses < 2 && ++misses == 2) {
+        ESP_LOGW(TAG, "RDY pin GPIO%d did not signal end of conversion, using OS bit polling", ads->rdy_pin.pin);
+      }
+    }
   } else {
     vTaskDelay(pdMS_TO_TICKS(conv_ms) + 1);
   }

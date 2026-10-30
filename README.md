@@ -124,10 +124,10 @@ thermistors, LCD and buttons fitted.
 
 ### 2.1.1 Build layout
 
-`project/mppt-hap/CMakeLists.txt` expects the repository root (or `HOMEKIT_PATH`) to contain
-`components/button`, `components/homekit` (esp-homekit-sdk) and `project/common` with
-`esp32-ads1115`, `container_nvs`, `captive-wifi`, `general-ota`, `outputwrite`,
-`app_hap_setup_payload` and `qrcode`. `set(COMPONENTS main)` limits the build to `main` and
+`project/mppt-hap/CMakeLists.txt` expects `HOMEKIT_PATH` (default: repository root) to contain
+`components/button` and `components/homekit` (esp-homekit-sdk). `project/common` is taken
+relative to the project folder (`../common`) and holds `esp32-ads1115`, `container_nvs`,
+`captive-wifi`, `general-ota`, `outputwrite`, `app_hap_setup_payload` and `qrcode`. `set(COMPONENTS main)` limits the build to `main` and
 its transitive `REQUIRES`, so other components in those folders (e.g. `app_wifi`) are not
 compiled. Project and binary name: `mppt1hs2`.
 

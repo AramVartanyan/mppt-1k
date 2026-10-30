@@ -59,9 +59,11 @@ static void control_task(void *arg)
         protection(&cfg);
         system_processes(&cfg);
         charging(&cfg);
-        /* Phase 1: no ADS1115 traffic yet, idle at 100 ms. The ADS1115
-         * conversion waits pace the loop once mppt_sensors_read() is ported. */
-        vTaskDelay(pdMS_TO_TICKS(100));
+        /* As in FUGU the loop runs back to back: the ADS1115 conversion waits
+         * (RDY interrupt) pace it at roughly 15 ms. One tick of delay keeps
+         * the idle task (task WDT) fed even when the ADS1115 is missing and
+         * the reads return at once. */
+        vTaskDelay(1);
     }
 }
 

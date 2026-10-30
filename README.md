@@ -318,7 +318,9 @@ one step, hold auto-repeat.
 - I2C: bus 0/1 pins, frequency (400 kHz), ADS1115 address (0x48), ADS1115 channel assignment
   (Vin = 3, Vout = 0, current = 2, temperature = 1), PGA (±4.096 V), data rate (860 SPS),
   use of RDY pin.
-- LCD: PCF8574 address (0x27), pin mapping (RS = P0, RW = P1, E = P2, BL = P3, D4–D7 = P4–P7).
+- LCD: PCF8574 address (0x27; PCF8574A boards answer at 0x3F, and the firmware probes
+  0x20–0x27 and 0x38–0x3F when the configured address does not answer), pin mapping
+  (RS = P0, RW = P1, E = P2, BL = P3, D4–D7 = P4–P7).
 - Calibration: `inVoltageDivRatio` 40.2156, `outVoltageDivRatio` 24.5, current scale 1.33,
   `currentSensV` 0.066 V/A, `currentMidPoint` 2.525 V, averaging counts (3 / 4 / 500),
   `voltageDropout` 1.0 V, `voltageBatteryThresh` 1.5 V, `currentInAbsolute` 31 A,

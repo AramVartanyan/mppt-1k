@@ -164,14 +164,47 @@ static esp_err_t lcd_write_cb(const hd44780_t *lcd, uint8_t data)
     return i2c_master_transmit(s_lcd_dev, &data, 1, 20);
 }
 
+static uint16_t s_lcd_addr = CONFIG_MPPT_LCD_ADDR;
+
+/* PCF8574 answers at 0x20..0x27, PCF8574A at 0x38..0x3F (A2..A0 select the
+ * low three bits; open pads on the usual backpacks are pulled high, giving
+ * 0x27 or 0x3F). Try the configured address first, then the rest. */
+static esp_err_t lcd_find_address(void)
+{
+    if (i2c_master_probe(s_bus1, CONFIG_MPPT_LCD_ADDR, 50) == ESP_OK) {
+        s_lcd_addr = CONFIG_MPPT_LCD_ADDR;
+        return ESP_OK;
+    }
+    static const uint8_t bases[] = {0x20, 0x38};
+    for (int b = 0; b < 2; b++) {
+        for (int a = 7; a >= 0; a--) {
+            uint8_t addr = bases[b] + a;
+            if (addr == CONFIG_MPPT_LCD_ADDR) {
+                continue;
+            }
+            if (i2c_master_probe(s_bus1, addr, 50) == ESP_OK) {
+                ESP_LOGW(TAG, "LCD not at 0x%02x, found PCF8574%s at 0x%02x (set it in menuconfig)",
+                         CONFIG_MPPT_LCD_ADDR, b ? "A" : "", addr);
+                s_lcd_addr = addr;
+                return ESP_OK;
+            }
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
 static esp_err_t lcd_init(void)
 {
+    esp_err_t err = lcd_find_address();
+    if (err != ESP_OK) {
+        return err;
+    }
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = CONFIG_MPPT_LCD_ADDR,
+        .device_address = s_lcd_addr,
         .scl_speed_hz = 100000,                /* PCF8574 is a 100 kHz part */
     };
-    esp_err_t err = i2c_master_bus_add_device(s_bus1, &dev_cfg, &s_lcd_dev);
+    err = i2c_master_bus_add_device(s_bus1, &dev_cfg, &s_lcd_dev);
     if (err != ESP_OK) {
         return err;
     }
@@ -283,9 +316,10 @@ esp_err_t mppt_hal_init(void)
 
 #ifdef CONFIG_MPPT_LCD_ENABLE
     if (lcd_init() != ESP_OK) {
-        ESP_LOGW(TAG, "LCD not found at 0x%02x", CONFIG_MPPT_LCD_ADDR);
+        ESP_LOGW(TAG, "LCD not found (no PCF8574 at 0x20-0x27 or 0x38-0x3F on SDA IO%d / SCL IO%d)",
+                 MPPT_I2C1_SDA, MPPT_I2C1_SCL);
     } else {
-        ESP_LOGI(TAG, "LCD ready at 0x%02x", CONFIG_MPPT_LCD_ADDR);
+        ESP_LOGI(TAG, "LCD ready at 0x%02x", s_lcd_addr);
     }
 #endif
 

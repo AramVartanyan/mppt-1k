@@ -20,8 +20,7 @@ once done.
   be fitted.
 - **Output capacitors C13/C14** are rated 35 V, so the output is limited to
   35 V (`CONFIG_MPPT_CAL_VOUT_SYS_MAX_MV`). Replace them with 63 V parts, then
-  set the limit back to FUGU's 50 V (the ceiling: the SMD output capacitors
-  are rated 50 V).
+  set the limit back to FUGU's 50 V.
 - **R27** (0 Ω, TH1 node to ADS1115 AIN1) must be fitted, otherwise AIN1
   floats and TH1 reads about −5 °C. TH1 is also wired directly to IO1
   (ADC1_CH0), which could serve as a backup reading.

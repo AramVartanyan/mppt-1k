@@ -308,8 +308,8 @@ The preset sets max/min voltage; the user can still edit both afterwards.
 
 Default preset is **None**. Hardware limit `vOutSystemMax` = 35 V (`CONFIG_MPPT_CAL_VOUT_SYS_MAX_MV`):
 the output capacitors C13/C14 on MPPT32 v1.1 are rated 35 V. FUGU uses 50 V; that value
-returns once C13/C14 are 63 V parts. 50 V is the ceiling in any case, since the SMD
-capacitors on the output are rated 50 V. 48 V systems are not offered. Preset voltages confirmed.
+returns once C13/C14 are 63 V parts. 63 V is the intended rating for C13/C14; the
+ceramic output capacitors are rated 100 V. 48 V systems are not offered. Preset voltages confirmed.
 
 Defined states (no undefined combination):
 

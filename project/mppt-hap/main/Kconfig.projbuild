@@ -304,8 +304,8 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
                 Upper limit for the battery max / output voltage setting.
                 MPPT32 v1.1 is fitted with 35 V output capacitors (C13/C14), so
                 the default is 35 V. FUGU uses 50 V; set 50000 only after
-                C13/C14 are replaced with 63 V parts. Never above 50 V: the SMD
-                capacitors on the output are rated 50 V.
+                C13/C14 are replaced with 63 V parts (the intended rating). The
+                range stops at FUGU's 50 V.
 
         config MPPT_CAL_PPWM_MARGIN_PERMILLE
             int "Predictive PWM margin (‰ of the ideal duty, FUGU 99.5 %)"

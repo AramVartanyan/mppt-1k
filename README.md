@@ -34,7 +34,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | 5 V / 3.3 V | LM7805 → LD1117V33 | 5 V for ACS712 and LCD; USB 5 V also feeds the 3.3 V LDO |
 | Inductor | L8, 60 µH (schematic) | parameters to be measured |
 | Fan | 3-wire 12 V fan on T3 (pin 2 = 12 V, pin 3 = switched GND via Q5 SI2306A, pin 1 NC) | on/off only; tachometer wire unconnected, no speed control |
-| Display | 16×2 HD44780 LCD with PCF8574 I2C backpack, T4 connector (5 V) | |
+| Display | 16×2 HD44780 LCD with PCF8574 I2C backpack, T4 connector (5 V) | remove the backpack's SDA/SCL pull-ups R8, R9 (see 1.6) |
 | Buttons | UP, DOWN, MENU, T5 connector, active low, no external pull-ups | internal pull-ups used |
 | Thermistors | TH1, TH2, 10 kΩ NTC, on PCB between the TO-220 MOSFETs | TH2 footprint carries the Wi-Fi LED by default (see 1.1) |
 | Protection | 30 A fuses F1/F2, VDR R1, TVS on USB | |
@@ -108,6 +108,16 @@ thermistors, LCD and buttons fitted.
   checked indirectly from ripple current under load.
 
 ---
+
+### 1.6 Assembly notes
+
+- **LCD backpack: remove R8 and R9** (4.7 kΩ, SDA/SCL pull-ups to the backpack's 5 V).
+  With them, SDA/SCL idle at about 4.4 V against R40/R41 (10 kΩ to 3.3 V): above the
+  ESP32-S2's 3.3 V I/O limit, and current flows back into the 3.3 V rail. The Wi-Fi PHY
+  calibration then fails (`phy: pll_cap_ext 10` repeated, then `abort()` in
+  `lock_acquire_generic`). Without R8/R9 the bus is pulled to 3.3 V by R40/R41 and the
+  ESP32-S2 internal pull-ups, and the LCD works normally. Leave R7 (pull-up of the
+  PCF8574 INT output, not on the connector) and the address pull-ups in place.
 
 ## 2. Firmware architecture
 
@@ -329,7 +339,27 @@ Defined states (no undefined combination):
 |---|---|---|
 | Charger | None | power stage off, LCD shows "Select battery type" until a preset or Custom is chosen |
 | Charger | preset / Custom | FUGU charger algorithm (MPPT or CC-CV) with the preset voltages and current |
-| PSU | any (None allowed) | regulated output at "Output voltage" for a load without battery; on input under-voltage the duty is ramped down to zero within `CONFIG_MPPT_PSU_SHUTDOWN_RAMP_MS` (default 100 ms: fast enough for a downstream MCU's brown-out detector, controlled enough to avoid an abrupt step), then the stage is disabled until Vin exceeds the set voltage plus dropout plus hysteresis for the recovery time |
+| PSU | any (None allowed) | regulated output at "Output voltage" for a load without battery; on input under-voltage the stage stops softly (see "Stopping the power stage" below), then stays disabled until Vin exceeds the set voltage plus dropout plus hysteresis for the recovery time |
+
+Stopping the power stage. The IR2104 has one input: IN = 1 turns on the high-side MOSFET,
+IN = 0 the low-side one, and `SD#` = 0 turns off both. A duty of 0 with the driver enabled
+therefore keeps the low-side MOSFET on and shorts the output through the inductor; the
+firmware never leaves the driver enabled at zero duty.
+
+- **Immediate stop** (faults: over-current, short, over-voltage, over-temperature, ADS1115
+  read failures; charger mode always): `SDWN` = 0 first, then PWM = 0, then backflow off.
+  Both MOSFETs are off at once and the inductor current decays through the low-side body
+  diode. FUGU's `buck_Disable()` uses the same order.
+- **Soft stop** (PSU mode, planned stops: menu, OTA, input under-voltage): the output
+  voltage set point is lowered, not the duty directly, so the loop reduces the duty only as
+  fast as the output really falls. It ends with `SDWN` = 0 when the first of these is reached:
+  - the output is at `CONFIG_MPPT_PSU_SOFTSTOP_LEVEL_PCT` of the set voltage (60–100 %,
+    default 60 %: downstream regulators drop out around there anyway);
+  - `CONFIG_MPPT_PSU_SOFTSTOP_MAX_MS` has passed (20–500 ms, default 150 ms);
+  - the output current is below `CONFIG_MPPT_PSU_SOFTSTOP_MIN_CURRENT_MA` (100–1000 mA,
+    default 200 mA). The output can only fall as fast as the load discharges the capacitors
+    (dV/dt ≈ I_load / C_out); lowering the duty faster makes the synchronous buck drive
+    current backwards, and with no load there is nothing to stop softly.
 
 Menu editing steps: voltages 0.1 V, current 0.5 A, temperatures 1 °C, price 0.01. Short press
 one step, hold auto-repeat.

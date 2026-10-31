@@ -341,16 +341,37 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
             range 1 64
             default 1
 
-        config MPPT_PSU_SHUTDOWN_RAMP_MS
-            int "PSU mode: duty ramp-down time on input under-voltage (ms)"
-            range 0 5000
-            default 100
+        config MPPT_PSU_SOFTSTOP_LEVEL_PCT
+            int "PSU mode: soft stop ends at this % of the set output voltage"
+            range 60 100
+            default 60
             help
-                Controlled ramp to zero duty before the stage is disabled, fast enough
-                for a downstream MCU brown-out detector.
+                Planned stops in PSU mode (menu, OTA, input under-voltage) lower the
+                voltage set point to this level, then disable the driver (SDWN).
+                100 disables the driver at once. Faults always disable it at once.
+
+        config MPPT_PSU_SOFTSTOP_MAX_MS
+            int "PSU mode: longest soft stop (ms)"
+            range 20 500
+            default 150
+            help
+                The driver is disabled after this time wherever the voltage is. The
+                lower limit is one control cycle; above 500 ms the stage would keep
+                switching on a collapsing input for too long.
+
+        config MPPT_PSU_SOFTSTOP_MIN_CURRENT_MA
+            int "PSU mode: soft stop ends below this output current (mA)"
+            range 100 1000
+            default 200
+            help
+                Below this output current the driver is disabled at once: the
+                synchronous buck would otherwise start to drive current backwards,
+                and with no load there is nothing to stop softly. 100 mA is about
+                the noise of the ACS712-30A reading.
 
         config MPPT_PSU_RECOVERY_HYST_MV
             int "PSU mode: input hysteresis above set voltage + dropout to re-enable (mV)"
+            range 200 5000
             default 1000
 
         config MPPT_PSU_RECOVERY_S

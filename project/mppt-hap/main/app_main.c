@@ -65,7 +65,11 @@ static void ota_event(const general_ota_info_t *info, void *ctx)
     char line[17];
     switch (info->event) {
     case GENERAL_OTA_EVT_UPDATE_AVAILABLE:
-        mppt_ui_ota_offer(info->new_version);
+        /* general_ota_update() reports the version it is about to download
+         * with this event too; asking again then would cover the progress */
+        if (general_ota_get_state() != GENERAL_OTA_DOWNLOADING) {
+            mppt_ui_ota_offer(info->new_version);
+        }
         break;
     case GENERAL_OTA_EVT_UP_TO_DATE:
         mppt_ui_message("FW up to date", general_ota_running_version(), 3000);

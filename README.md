@@ -496,8 +496,8 @@ Versioning rule: every new pull request raises the patch number of `CONFIG_APP_P
 `project/mppt-hap/sdkconfig.defaults` by one (0.1.5 → 0.1.6), once the previous pull request
 is merged into `main`. Further commits to a pull request that is still open keep its version.
 An existing local `sdkconfig` keeps its own value; set it in menuconfig (Application manager →
-Project version) or regenerate `sdkconfig`. A new image is uploaded to `otafw` only after it
-has been tested over USB.
+Project version) or regenerate `sdkconfig`. Once more than one device is in use, a new image is
+tested over USB on one device before it is uploaded to `otafw`.
 
 What changed against `fupdateota` and why:
 

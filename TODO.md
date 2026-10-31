@@ -34,7 +34,9 @@ once done.
 ## Firmware
 
 - Phase 3, in the steps of README section 7 (simple first, PSU from panels
-  last). Also: output over-voltage trips at `vOutSystemMax` itself, not only
+  last). `mppt_control_emergency_stop()` currently sets PWM = 0 before
+  `SDWN`; change it to `SDWN` → PWM = 0 → backflow off, and add the PSU soft
+  stop (README 3.2, "Stopping the power stage"). Also: output over-voltage trips at `vOutSystemMax` itself, not only
   at battery max + threshold; repeated faults latch until confirmed on the LCD
   (README 2.5, item 8).
 - Phase 4: captive portal and HomeKit accessory; test the fan HomeKit service.

@@ -98,13 +98,22 @@ static void ota_event(const general_ota_info_t *info, void *ctx)
     }
 }
 
+/* First check MPPT_OTA_AUTOCHECK_S after Wi-Fi connects, then every
+ * MPPT_OTA_RECHECK_DAYS. A check that finds Wi-Fi down is redone 1 min after
+ * the next connection. */
 static void ota_timer_cb(void *arg)
 {
     (void)arg;
-    if (!s_ota_checked && captive_wifi_is_connected()) {
-        s_ota_checked = true;
-        ESP_LOGI(TAG, "automatic firmware check");
-        general_ota_check();
+    if (!captive_wifi_is_connected()) {
+        s_ota_checked = false;
+        return;
+    }
+    s_ota_checked = true;
+    ESP_LOGI(TAG, "automatic firmware check");
+    mppt_ui_ota_forget_declined();      /* a declined version is offered again */
+    general_ota_check();
+    if (MPPT_OTA_RECHECK_DAYS > 0) {
+        esp_timer_start_once(s_ota_timer, (uint64_t)MPPT_OTA_RECHECK_DAYS * 86400ULL * 1000000ULL);
     }
 }
 

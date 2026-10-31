@@ -92,13 +92,18 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
             default 0
 
         config LED_GPIO
-            int "Status LED output (not fitted on MPPT32 v1.1; IO2 is free on the module)"
+            int "Status LED output (IO14: LED fitted on the TH2 footprint)"
             range 0 46
-            default 2
+            default 14
+            help
+                On MPPT32 v1.1 the Wi-Fi LED sits on the TH2 footprint: anode to
+                3V3, cathode through a series resistor to IO14 (and R39 to GND).
+                To fit an NTC there instead, move this to a free pin (IO2 is
+                unconnected on the module) and enable TH2 under the NTC menu.
 
         config LED_ACTIVE_LOW
             bool "Status LED is active low"
-            default n
+            default y
 
     endmenu
 
@@ -293,7 +298,14 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
 
         config MPPT_CAL_VOUT_SYS_MAX_MV
             int "Maximum output voltage of the hardware (mV)"
-            default 50000
+            range 0 50000
+            default 35000
+            help
+                Upper limit for the battery max / output voltage setting.
+                MPPT32 v1.1 is fitted with 35 V output capacitors (C13/C14), so
+                the default is 35 V. FUGU uses 50 V; set 50000 only after
+                C13/C14 are replaced with 63 V parts (the intended rating). The
+                range stops at FUGU's 50 V.
 
         config MPPT_CAL_PPWM_MARGIN_PERMILLE
             int "Predictive PWM margin (‰ of the ideal duty, FUGU 99.5 %)"
@@ -374,7 +386,11 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
 
         config MPPT_NTC2_ENABLE
             bool "Read redundant TH2 on the on-chip ADC (only while Wi-Fi is off)"
-            default y
+            default n
+            help
+                Off by default: on MPPT32 v1.1 the TH2 footprint carries the
+                Wi-Fi LED on IO14. To use an NTC there, fit it in place of the
+                LED, enable this and move the status LED off IO14.
 
         config MPPT_NTC2_ADC_UNIT
             int "TH2 ADC unit (1 or 2; IO14 is ADC2)"

@@ -8,9 +8,13 @@ The charging logic is a port of Angelo Casimiro's
 (V1.10, CC0 1.0 / public domain) from Arduino/ESP32 to ESP-IDF/ESP32-S2, running on the
 **MPPT32 v1.1** board (`files/Schematic_MPPT32_2026-09-22.pdf`).
 
-> **Status: phase 2 (measurement and UI) done, untested on hardware.** This document is the
-> agreed specification. The project builds for `esp32s2` on ESP-IDF v5.5.4; control,
-> connectivity and HomeKit follow in phases 3–5 (section 7).
+The main goal is **PSU mode**: a stable regulated output from PV panels **without a battery**,
+which off-the-shelf MPPT chargers do not offer. Battery charging (CC-CV) is kept from FUGU as
+the second mode.
+
+> **Status: phase 2 (measurement and UI) done and running on the hardware** (sensors, LCD,
+> menu, buttons, USB console). This document is the agreed specification. Next: OTA, then
+> phase 3, control (section 7).
 
 ---
 
@@ -32,7 +36,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | Fan | 3-wire 12 V fan on T3 (pin 2 = 12 V, pin 3 = switched GND via Q5 SI2306A, pin 1 NC) | on/off only; tachometer wire unconnected, no speed control |
 | Display | 16×2 HD44780 LCD with PCF8574 I2C backpack, T4 connector (5 V) | |
 | Buttons | UP, DOWN, MENU, T5 connector, active low, no external pull-ups | internal pull-ups used |
-| Thermistors | TH1, TH2, 10 kΩ NTC, on PCB between the TO-220 MOSFETs | |
+| Thermistors | TH1, TH2, 10 kΩ NTC, on PCB between the TO-220 MOSFETs | TH2 footprint carries the Wi-Fi LED by default (see 1.1) |
 | Protection | 30 A fuses F1/F2, VDR R1, TVS on USB | |
 
 ### 1.1 GPIO map (ESP32-S2)
@@ -49,17 +53,18 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | SDA2 / SCL2 (temporary) | IO16 / IO17 | I2C bus 1 | **temporary, test board only.** The hardware is designed for IO9/IO10 and those stay the firmware defaults. On the first prototype IO9, IO10, IO11 and the strapping pin IO46 are shorted together. R40/R41 then pull IO46 high and the chip cannot enter download mode (`boot:0x4`); for flashing, tie T4 pin 3 (SDA2) to pin 1 (GND) or remove R40/R41 and check that IO46 reads 0 V at reset. On the test board the SDA2/SCL2 traces are cut between the module and R40/R41, and the resistor side is wired to IO16/IO17 (module pins 9/10; neighbours IO15 and IO18 unused, so a solder bridge is harmless), so T4 and the pull-ups stay in use; the pins are selected only in that board's menuconfig (`Bus 1 SDA/SCL`). Avoid IO34 (next to strapping pin IO45). Internal pull-ups are enabled on both buses |
 | READ | IO39 | in | ADS1115 ALERT/RDY (10 kΩ pull-up) |
 | ADC0 | IO1 | ADC1_CH0 | TH1 (also wired to ADS1115 AIN1 through R27 0 Ω) |
-| ADC1 | IO14 | ADC2_CH3 | TH2 (ADC2 is not usable while Wi-Fi is active on ESP32-S2) |
+| ADC1 | IO14 | ADC2_CH3 | TH2 (ADC2 is not usable while Wi-Fi is active on ESP32-S2). Default: Wi-Fi status LED on the TH2 footprint (anode to 3V3, cathode through 500 Ω to IO14 and R39, active low). An NTC can still be fitted there instead (see 1.3) |
 | UP / DWN / MENU | IO5 / IO6 / IO7 | in, pull-up | buttons |
 | IO0 | IO0 | in | boot button S2A; HomeKit reset button (3 s Wi-Fi reset, 10 s factory reset) |
 | TXD0 / RXD0 | | UART0 | T6 header; console only when selected instead of USB |
 | IO19 / IO20 | | USB D- / D+ | native USB: console, telemetry, flashing |
 
-There is no status LED on the MPPT32 v1.1 board (D3 is a hardware indicator on the backflow
-gate supply). The firmware drives the `led_indicator` engine from `outputwrite` anyway (Wi-Fi
-state as steady base, HAP identify, OTA blink, reset patterns, over-temperature); the GPIO is
-`CONFIG_LED_GPIO` and defaults to IO2, which is unconnected on the module, so an external LED
-can be wired to it. GPIO configuration goes through `outputwrite` (`ioInit`, `OutputWrite`,
+The MPPT32 v1.1 board has no dedicated status LED pin (D3 is a hardware indicator on the
+backflow gate supply). The status LED is fitted on the TH2 footprint instead: anode to 3V3,
+cathode through a 500 Ω series resistor to IO14, with R39 (10 kΩ) to GND, so it is active
+low. The firmware drives it with the `led_indicator` engine from `outputwrite` (Wi-Fi state
+as steady base, HAP identify, OTA blink, reset patterns, over-temperature);
+`CONFIG_LED_GPIO` defaults to 14 and `CONFIG_LED_ACTIVE_LOW` to y. GPIO configuration goes through `outputwrite` (`ioInit`, `OutputWrite`,
 `ReadInput`).
 
 ### 1.2 Analog channels (ADS1115)
@@ -85,6 +90,9 @@ Against the Semitec resistance table the Beta formula with B = 3435 is within
 - **TH1 is the primary sensor**, read through ADS1115 AIN1 (16-bit, independent of Wi-Fi).
   AIN1 is connected to the TH1 node only through R27 (0 Ω); without R27 the input floats.
 - **TH2 is redundant**, read through IO14 (ADC2) with `ntc_driver`, only while Wi-Fi is off.
+  Off by default (`CONFIG_MPPT_NTC2_ENABLE`): the TH2 footprint carries the status LED. To use
+  TH2, fit the NTC in place of the LED, enable TH2 and move `CONFIG_LED_GPIO` to a free pin
+  (e.g. IO2); the build stops with an error if both are left on IO14.
 
 ### 1.4 Power for bench testing
 
@@ -95,9 +103,9 @@ thermistors, LCD and buttons fitted.
 
 ### 1.5 Pending hardware data
 
-- L8: inductance, DC resistance, wire, turns, core dimensions (to be measured). Core material
-  is unknown; saturation will be checked indirectly from ripple current under load.
-- NTC B constant: to be determined from a two-temperature measurement.
+- L8: 60 µH per schematic, 31 turns. Inductance, DC resistance, wire and core dimensions to
+  be taken from the datasheet or measured. Core material is unknown; saturation will be
+  checked indirectly from ripple current under load.
 
 ---
 
@@ -200,6 +208,11 @@ Changed or fixed:
 6. The P&O step (±1 LSB per cycle in FUGU) becomes a Kconfig parameter, default 1.
 7. Battery presets replace free-form voltages as the primary way to configure the battery
    (see 3.2). Free-form voltage/current editing remains available.
+8. Repeated faults latch. As in FUGU, a protection fault (OTE, IOC, OOC, OOV, FLV) stops the
+   power stage and it restarts by itself once the cause clears. If the same kind of fault
+   comes back too often (default: 3 faults within 5 minutes, both Kconfig parameters), the
+   stage stays off until the user confirms on the LCD. Normal states (IUV at sunset, BNC,
+   REC) never count towards the latch.
 
 Kept with changes: `electricalPrice` / `energySavings` stay (default 0.27 EUR/kWh), but the
 price becomes a menu setting and the savings are shown on the LCD only, not in HomeKit.
@@ -224,9 +237,9 @@ credential helpers (`has`, `clear`), status (`is_connected`, `portal_active`, `a
 stopped). The application keeps `TakeStatusConnected(bool)` as the single place that maps
 connection state to the LED and shared state, as the HomeKit template did. Target size:
 500–600 lines of C plus ~6 KB embedded HTML, no dependencies beyond `esp_wifi`,
-`esp_netif`, `esp_http_server`, `lwip`, `nvs_flash` and `mdns`. Phase 1 contains the STA
-part (credentials in NVS namespace `cwifi`, connect, reconnect, events); the portal follows
-in phase 4.
+`esp_netif`, `esp_http_server`, `lwip`, `nvs_flash` and `mdns`. STA part (credentials in NVS
+namespace `cwifi`, connect, reconnect, events) and the portal are done; mDNS comes with
+HomeKit in phase 4.
 
 Behaviour:
 
@@ -237,8 +250,11 @@ Behaviour:
    opens automatically on iOS, Android and Windows.
 3. Portal page: scanned networks with signal strength, password field, connect button,
    status. HTTP endpoints `/`, `/scan`, `/connect`, `/status`.
-4. Credentials saved through `container_nvs`; the device switches to STA (reboot only if
-   needed).
+4. The device tries the chosen network while the portal stays up (the page polls
+   `/status`; the radio may change channel, so the phone can drop the AP for a moment).
+   Credentials are saved only after the network gives an IP, so a typo never replaces a
+   working network. 10 s later the portal stops and the device stays in STA, no reboot.
+   A failed attempt (3 disconnects or 30 s) is shown on the page and the LCD.
 5. LCD shows the AP name and `192.168.4.1` while the portal is active, and IP + RSSI when
    connected.
 6. "Reset WiFi" (menu, or IO0 held 3 s) erases credentials and returns to the portal.
@@ -274,8 +290,8 @@ a setting separate from HAP for this status page.
 | Output mode | Charger | Charger / PSU (regulated output voltage, battery optional) | menu, HomeKit custom |
 | MPPT algorithm | on | on = MPPT, off = CC-CV only | menu, HomeKit custom |
 | Battery preset | None | see 3.2; the user selects the type after first power-up | menu |
-| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–50 V, 0.1 V step in the menu | menu, HomeKit custom |
-| Battery min voltage | 22.40 V (FUGU) | 0–50 V | menu, HomeKit custom |
+| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–35 V (`vOutSystemMax`), 0.1 V step in the menu | menu, HomeKit custom |
+| Battery min voltage | 22.40 V (FUGU) | 0 V – battery max | menu, HomeKit custom |
 | Charging current | 30.0 A | 0–30 A | menu, HomeKit custom |
 | Fan enabled | on | on/off | menu, HomeKit Fan |
 | Fan on temperature | 60 °C | 0–100 °C | menu |
@@ -302,8 +318,10 @@ The preset sets max/min voltage; the user can still edit both afterwards.
 | 24 V LiFePO4 (8S) | 28.80 V | 24.00 V | |
 | Custom | user-set | user-set | |
 
-Default preset is **None**. Hardware limit `vOutSystemMax = 50 V` (as in FUGU), so 48 V
-systems are not offered. Preset voltages confirmed.
+Default preset is **None**. Hardware limit `vOutSystemMax` = 35 V (`CONFIG_MPPT_CAL_VOUT_SYS_MAX_MV`):
+the output capacitors C13/C14 on MPPT32 v1.1 are rated 35 V. FUGU uses 50 V; that value
+returns once C13/C14 are 63 V parts. 63 V is the intended rating for C13/C14; the
+ceramic output capacitors are rated 100 V. 48 V systems are not offered. Preset voltages confirmed.
 
 Defined states (no undefined combination):
 
@@ -328,7 +346,7 @@ one step, hold auto-repeat.
 - Calibration: `inVoltageDivRatio` 40.2156, `outVoltageDivRatio` 24.5, current scale 1.33,
   `currentSensV` 0.066 V/A, `currentMidPoint` 2.525 V, averaging counts (3 / 4 / 500),
   `voltageDropout` 1.0 V, `voltageBatteryThresh` 1.5 V, `currentInAbsolute` 31 A,
-  `currentOutAbsolute` 50 A, `vInSystemMin` 10 V, `vOutSystemMax` 50 V, `PPWM_margin` 99.5 %,
+  `currentOutAbsolute` 50 A, `vInSystemMin` 10 V, `vOutSystemMax` 35 V (FUGU 50 V), `PPWM_margin` 99.5 %,
   `PWM_MaxDC` 97 %, `efficiencyRate` 1.0.
 - PWM: frequency 39 kHz, resolution 11 bit (LEDC low-speed mode), P&O step 1.
 - NTC: R25, B, R_fixed, Vdd, circuit mode, TH2 ADC channel.
@@ -478,8 +496,27 @@ Each phase is reviewed and approved before the next starts.
    numbered menu with Device Setup, settings editing, counter persistence, OTA prompt and
    automatic check, reset semantics in `mppt_system`, TH2 gated by Wi-Fi. To be tested from
    USB power without the power stage.
-3. **Control** — `mppt_control`: protection and charging algorithm. First tests with a
-   laboratory PSU instead of a panel, then PV.
+3. **Control** — `mppt_control`: protection, regulation and charging, in steps from simple
+   to complex; each step is tested on the hardware before the next starts. Bench equipment:
+   analog laboratory PSU, two channels of 20 V / 3 A with an adjustable, instant current limit
+   (in series 40 V / 3 A, 120 W), small oscilloscope, 4 Ω / 500 W resistive load. With 40 V in
+   and 4 Ω out, outputs up to about 20 V (5 A, 100 W) stay within the PSU's 120 W. In current
+   limit the PSU behaves roughly like a PV panel (constant voltage, then constant current), so
+   P&O MPPT can be tried on the bench before real panels.
+   1. Inputs and outputs without switching: PWR12, fan by temperature with hysteresis;
+      backflow and buck stay off.
+   2. Protections dry run: all fault flags computed and shown, including the latch (2.5,
+      item 8); thresholds may be lowered temporarily to trigger them. Buck stays off.
+   3. Shutdown path: `SDWN` first, then PWM = 0; ADS1115 read failures count as a fault.
+      Checked with the oscilloscope.
+   4. Fixed duty cycle from the laboratory PSU into the resistive load: gate drive, inductor
+      ripple (L8 estimate), current and voltage calibration against a multimeter.
+   5. Output voltage regulation (the core of PSU mode) from the laboratory PSU: steady output
+      under load changes, current limit.
+   6. MPPT (P&O) from panels into the resistive load.
+   7. Battery charging (CC-CV), only once a battery is used.
+   8. PSU mode from panels: clouds, load steps, sunset ramp-down and recovery. The most
+      testing and debugging.
 4. **Connectivity** — `captive-wifi` component, Device Setup menu, OTA check; then
    `mppt_hap` and replacement of the template callbacks.
 5. **Extras** — web status page on the device IP, TH2 redundancy, Wh persistence tuning, Eve
@@ -490,7 +527,6 @@ Each phase is reviewed and approved before the next starts.
 ## 8. Open items
 
 - L8 parameters (see 1.5).
-- NTC B constant after calibration.
 - ACS712 midpoint auto-calibration: kept exactly as in FUGU for now (whenever the buck is off
   and no FLV/OOV); a plausibility guard (PGOOD high, sensor voltage 2.0–3.0 V) is under
   consideration.

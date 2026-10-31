@@ -15,8 +15,12 @@ once done.
     to a spare GPIO so the firmware can latch the fault;
   - or a current sensor with a built-in fault output (ACS710 / ACS711) wired
     to `SD#` the same way.
-- **TH2** is on IO14 (ADC2), which is unreliable while Wi-Fi is on. Move it to
-  an ADC1 pin (GPIO1–10).
+- **Status LED** has no pin of its own and sits on the TH2 footprint (IO14). On
+  the next board revision give it a dedicated pin, so TH2 and the LED can both
+  be fitted.
+- **Output capacitors C13/C14** are rated 35 V, so the output is limited to
+  35 V (`CONFIG_MPPT_CAL_VOUT_SYS_MAX_MV`). Replace them with 63 V parts, then
+  set the limit back to FUGU's 50 V.
 - **R27** (0 Ω, TH1 node to ADS1115 AIN1) must be fitted, otherwise AIN1
   floats and TH1 reads about −5 °C. TH1 is also wired directly to IO1
   (ADC1_CH0), which could serve as a backup reading.
@@ -29,9 +33,10 @@ once done.
 
 ## Firmware
 
-- Phase 3: protections (on a fault, `SDWN` first, then PWM = 0), backflow,
-  P&O MPPT / CC-CV, PSU mode, fan, PWR12 check. Several consecutive ADS1115
-  read failures count as a fault.
+- Phase 3, in the steps of README section 7 (simple first, PSU from panels
+  last). Also: output over-voltage trips at `vOutSystemMax` itself, not only
+  at battery max + threshold; repeated faults latch until confirmed on the LCD
+  (README 2.5, item 8).
 - Phase 4: captive portal and HomeKit accessory; test the fan HomeKit service.
-- OTA, before the unit goes into its enclosure.
-- LCD and menu: test once the display wiring is fixed.
+- OTA: next, before phase 3 (flashing over USB works, but updates in the
+  enclosure should not need a cable).

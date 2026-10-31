@@ -285,6 +285,12 @@ esp_err_t mppt_hal_lcd_backlight(bool on)
 
 /* ------------------------------------------------------------------- NTC2 */
 
+/* IO14 is ADC2_CH3: TH2 and the status LED share that footprint. */
+#if defined(CONFIG_MPPT_NTC2_ENABLE) && CONFIG_MPPT_NTC2_ADC_UNIT == 2 && \
+    CONFIG_MPPT_NTC2_ADC_CHANNEL == 3 && CONFIG_LED_GPIO == 14
+#error "TH2 and the status LED both use IO14: move CONFIG_LED_GPIO or disable TH2"
+#endif
+
 static esp_err_t ntc2_init(void)
 {
 #ifdef CONFIG_MPPT_NTC2_ENABLE

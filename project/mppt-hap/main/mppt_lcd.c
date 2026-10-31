@@ -460,7 +460,7 @@ static const char *dialog_title(void)
     case DLG_HAP_TOGGLE:     return s_edit.hap_enabled ? "Disable HAP?" : "Enable HAP?";
     case DLG_WIFI_TOGGLE:    return s_edit.wifi_enabled ? "Disable WiFi?" : "Enable WiFi?";
     case DLG_WIFI_RESET:     return "Reset WiFi?";
-    case DLG_HAP_RESET:      return "Unpair HomeKit?";
+    case DLG_HAP_RESET:      return "Reset HAP?";
     case DLG_FACTORY:        return "Factory reset?";
     case DLG_RESET_COUNTERS: return "Reset energy?";
     case DLG_OTA:            return "Update Firmware?";

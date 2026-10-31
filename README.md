@@ -52,8 +52,8 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | ADC1 | IO14 | ADC2_CH3 | TH2 (ADC2 is not usable while Wi-Fi is active on ESP32-S2) |
 | UP / DWN / MENU | IO5 / IO6 / IO7 | in, pull-up | buttons |
 | IO0 | IO0 | in | boot button S2A; HomeKit reset button (3 s Wi-Fi reset, 10 s factory reset) |
-| TXD0 / RXD0 | | UART0 | console / telemetry, T6 header |
-| IO19 / IO20 | | USB D- / D+ | native USB (console optional) |
+| TXD0 / RXD0 | | UART0 | T6 header; console only when selected instead of USB |
+| IO19 / IO20 | | USB D- / D+ | native USB: console, telemetry, flashing |
 
 There is no status LED on the MPPT32 v1.1 board (D3 is a hardware indicator on the backflow
 gate supply). The firmware drives the `led_indicator` engine from `outputwrite` anyway (Wi-Fi
@@ -335,7 +335,7 @@ one step, hold auto-repeat.
 - Timing: routine interval 250 ms, LCD interval 1 s, HAP push interval 2 s, error window 1 s,
   error count limit 5, menu timeout 7 s, Wh persist interval.
 - HomeKit: manufacturer, model, hardware revision, setup code (test builds only), name pattern.
-- Console: UART0 (default, also used for flashing) or USB CDC on the mini-USB port.
+- Console: USB CDC on the mini-USB port (default; flashing and monitor work through it), or UART0 on T6 selected in menuconfig. The ESP32-S2 has one console, not both.
 
 ### 3.4 Persistence of energy counters
 
@@ -496,7 +496,7 @@ Each phase is reviewed and approved before the next starts.
   consideration.
 - HomeKit Fan service and custom characteristics: final configuration after testing with
   Apple's tools.
-- Console: UART0 for development; USB CDC to be evaluated later.
+- Console: USB CDC on the mini-USB port, so the unit can be flashed and monitored when closed.
 
 ---
 

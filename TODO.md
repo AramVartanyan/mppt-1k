@@ -15,12 +15,9 @@ once done.
     to a spare GPIO so the firmware can latch the fault;
   - or a current sensor with a built-in fault output (ACS710 / ACS711) wired
     to `SD#` the same way.
-- **Wi-Fi LED on the TH2 footprint.** TH2 is not fitted; an LED sits in its
-  place (anode to 3V3, cathode to IO14 and R39). With IO14 low nothing limits
-  the current, so fit a series resistor (330 Ω – 1 kΩ), then set
-  `CONFIG_LED_GPIO` = 14 and `CONFIG_LED_ACTIVE_LOW` = y. Until then IO14 stays
-  an input (the LED glows faintly through R39). On the next board revision give
-  the LED its own pin and resistor.
+- **Status LED** has no pin of its own and sits on the TH2 footprint (IO14). On
+  the next board revision give it a dedicated pin, so TH2 and the LED can both
+  be fitted.
 - **R27** (0 Ω, TH1 node to ADS1115 AIN1) must be fitted, otherwise AIN1
   floats and TH1 reads about −5 °C. TH1 is also wired directly to IO1
   (ADC1_CH0), which could serve as a backup reading.

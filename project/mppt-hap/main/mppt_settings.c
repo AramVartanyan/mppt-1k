@@ -63,12 +63,13 @@ const char *mppt_settings_preset_name(mppt_battery_preset_t p)
     return (p < MPPT_BATT_PRESET_COUNT) ? names[p] : "?";
 }
 
-/* Keep the voltages within the hardware limit, whatever wrote them
+/* Keep voltages and current within the hardware limits, whatever wrote them
  * (menu, preset, NVS from an older build, HomeKit). */
 static void clamp_voltages(mppt_settings_t *s)
 {
     if (s->vbat_max > MPPT_CAL_VOUT_SYS_MAX) s->vbat_max = MPPT_CAL_VOUT_SYS_MAX;
     if (s->vbat_min > s->vbat_max) s->vbat_min = s->vbat_max;
+    if (s->i_charge > MPPT_CAL_IOUT_ABS) s->i_charge = MPPT_CAL_IOUT_ABS;
 }
 
 static esp_err_t store(void)

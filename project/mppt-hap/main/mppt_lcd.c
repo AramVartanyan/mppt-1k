@@ -351,7 +351,7 @@ static void item_adjust(item_id_t id, int dir)
     case IT_ICHG:
         s_edit.i_charge += 0.5f * dir;
         if (s_edit.i_charge < 0) s_edit.i_charge = 0;
-        if (s_edit.i_charge > MPPT_CAL_IIN_ABS) s_edit.i_charge = MPPT_CAL_IIN_ABS;
+        if (s_edit.i_charge > MPPT_CAL_IOUT_ABS) s_edit.i_charge = MPPT_CAL_IOUT_ABS;
         break;
     case IT_CHARGING:  s_edit.charging_enabled = !s_edit.charging_enabled; break;
     case IT_FAN:       s_edit.fan_enabled = !s_edit.fan_enabled; break;

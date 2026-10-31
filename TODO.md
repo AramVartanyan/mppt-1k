@@ -27,7 +27,8 @@ once done.
 
 ## Calibration
 
-- L8 parameters.
+- L8 under load: measure the current ripple at 15–16 A (README 1.5) in phase 3,
+  step 4.
 - ACS712 midpoint auto-calibration: guard against calibrating while current
   flows.
 

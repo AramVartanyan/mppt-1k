@@ -45,6 +45,7 @@ static char s_name[16];
 static char s_serial[16];
 static esp_timer_handle_t s_ota_timer;
 static bool s_ota_checked;
+static bool s_portal_used;          /* setup portal ran since boot */
 
 /* Wi-Fi connection status → LED base level and shared state
  * (kept as a plain function so HomeKit-side code can call it too). */
@@ -111,6 +112,12 @@ static void wifi_event(captive_wifi_event_t evt, void *ctx)
     switch (evt) {
     case CAPTIVE_WIFI_EVT_STA_CONNECTED:
         TakeStatusConnected(true);
+        if (s_portal_used) {                /* show the result of the setup */
+            char ip[16] = "";
+            captive_wifi_get_ip(ip, sizeof(ip));
+            mppt_ui_message("WiFi connected", ip, 5000);
+            s_portal_used = false;
+        }
         if (MPPT_OTA_AUTOCHECK_S > 0 && !s_ota_checked && s_ota_timer) {
             esp_timer_stop(s_ota_timer);
             esp_timer_start_once(s_ota_timer, (uint64_t)MPPT_OTA_AUTOCHECK_S * 1000000ULL);
@@ -119,13 +126,25 @@ static void wifi_event(captive_wifi_event_t evt, void *ctx)
     case CAPTIVE_WIFI_EVT_STA_DISCONNECTED:
         TakeStatusConnected(false);
         break;
-    case CAPTIVE_WIFI_EVT_PORTAL_STARTED:
+    case CAPTIVE_WIFI_EVT_PORTAL_STARTED: {
+        char l1[17];
+        snprintf(l1, sizeof(l1), "AP %s", captive_wifi_ap_ssid());
         ledBreathe(true);
-        mppt_ui_message("WiFi setup AP:", captive_wifi_ap_ssid(), 0);
+        s_portal_used = true;
+        mppt_ui_message(l1, captive_wifi_portal_ip(), 0);
         break;
-    case CAPTIVE_WIFI_EVT_PORTAL_STOPPED:
+    }
+    case CAPTIVE_WIFI_EVT_PORTAL_CONNECT_FAILED:
+        mppt_ui_message("WiFi not joined", "see setup page", 5000);
+        break;
+    case CAPTIVE_WIFI_EVT_PORTAL_STOPPED: {
+        char ip[16];
         ledBreathe(false);
+        if (captive_wifi_get_ip(ip, sizeof(ip)) != ESP_OK) {
+            mppt_ui_message("WiFi setup", "closed", 3000);  /* replaces the AP message */
+        }
         break;
+    }
     }
     mppt_state_lock();
     mppt_state_get()->portal_active = captive_wifi_portal_active();
@@ -219,6 +238,8 @@ void app_main(void)
     if (cfg.wifi_enabled) {
         ESP_ERROR_CHECK(captive_wifi_init(s_name, wifi_event, NULL));
         captive_wifi_start();
+        /* TODO(phase 4): start HomeKit on CAPTIVE_WIFI_EVT_STA_CONNECTED instead,
+         * never while the setup portal runs: both serve port 80. */
         if (cfg.hap_enabled) {
             if (mppt_hap_start(s_name, s_serial) != ESP_OK) {
                 ESP_LOGW(TAG, "HomeKit not started");

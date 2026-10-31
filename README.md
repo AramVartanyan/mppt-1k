@@ -237,9 +237,9 @@ credential helpers (`has`, `clear`), status (`is_connected`, `portal_active`, `a
 stopped). The application keeps `TakeStatusConnected(bool)` as the single place that maps
 connection state to the LED and shared state, as the HomeKit template did. Target size:
 500–600 lines of C plus ~6 KB embedded HTML, no dependencies beyond `esp_wifi`,
-`esp_netif`, `esp_http_server`, `lwip`, `nvs_flash` and `mdns`. Phase 1 contains the STA
-part (credentials in NVS namespace `cwifi`, connect, reconnect, events); the portal follows
-in phase 4.
+`esp_netif`, `esp_http_server`, `lwip`, `nvs_flash` and `mdns`. STA part (credentials in NVS
+namespace `cwifi`, connect, reconnect, events) and the portal are done; mDNS comes with
+HomeKit in phase 4.
 
 Behaviour:
 
@@ -250,8 +250,11 @@ Behaviour:
    opens automatically on iOS, Android and Windows.
 3. Portal page: scanned networks with signal strength, password field, connect button,
    status. HTTP endpoints `/`, `/scan`, `/connect`, `/status`.
-4. Credentials saved through `container_nvs`; the device switches to STA (reboot only if
-   needed).
+4. The device tries the chosen network while the portal stays up (the page polls
+   `/status`; the radio may change channel, so the phone can drop the AP for a moment).
+   Credentials are saved only after the network gives an IP, so a typo never replaces a
+   working network. 10 s later the portal stops and the device stays in STA, no reboot.
+   A failed attempt (3 disconnects or 30 s) is shown on the page and the LCD.
 5. LCD shows the AP name and `192.168.4.1` while the portal is active, and IP + RSSI when
    connected.
 6. "Reset WiFi" (menu, or IO0 held 3 s) erases credentials and returns to the portal.

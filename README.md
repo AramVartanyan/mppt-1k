@@ -34,7 +34,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | 5 V / 3.3 V | LM7805 → LD1117V33 | 5 V for ACS712 and LCD; USB 5 V also feeds the 3.3 V LDO |
 | Inductor | L8, 60 µH (schematic) | parameters to be measured |
 | Fan | 3-wire 12 V fan on T3 (pin 2 = 12 V, pin 3 = switched GND via Q5 SI2306A, pin 1 NC) | on/off only; tachometer wire unconnected, no speed control |
-| Display | 16×2 HD44780 LCD with PCF8574 I2C backpack, T4 connector (5 V) | |
+| Display | 16×2 HD44780 LCD with PCF8574 I2C backpack, T4 connector (5 V) | remove the backpack's SDA/SCL pull-ups R8, R9 (see 1.6) |
 | Buttons | UP, DOWN, MENU, T5 connector, active low, no external pull-ups | internal pull-ups used |
 | Thermistors | TH1, TH2, 10 kΩ NTC, on PCB between the TO-220 MOSFETs | TH2 footprint carries the Wi-Fi LED by default (see 1.1) |
 | Protection | 30 A fuses F1/F2, VDR R1, TVS on USB | |
@@ -108,6 +108,16 @@ thermistors, LCD and buttons fitted.
   checked indirectly from ripple current under load.
 
 ---
+
+### 1.6 Assembly notes
+
+- **LCD backpack: remove R8 and R9** (4.7 kΩ, SDA/SCL pull-ups to the backpack's 5 V).
+  With them, SDA/SCL idle at about 4.4 V against R40/R41 (10 kΩ to 3.3 V): above the
+  ESP32-S2's 3.3 V I/O limit, and current flows back into the 3.3 V rail. The Wi-Fi PHY
+  calibration then fails (`phy: pll_cap_ext 10` repeated, then `abort()` in
+  `lock_acquire_generic`). Without R8/R9 the bus is pulled to 3.3 V by R40/R41 and the
+  ESP32-S2 internal pull-ups, and the LCD works normally. Leave R7 (pull-up of the
+  PCF8574 INT output, not on the connector) and the address pull-ups in place.
 
 ## 2. Firmware architecture
 

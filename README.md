@@ -495,9 +495,11 @@ Each phase is reviewed and approved before the next starts.
    USB power without the power stage.
 3. **Control** — `mppt_control`: protection, regulation and charging, in steps from simple
    to complex; each step is tested on the hardware before the next starts. Bench equipment:
-   laboratory PSU 20 V / 3 A with current limit, small oscilloscope, 4 Ω / 500 W resistive
-   load. With 20 V in and 4 Ω out, outputs up to about 12 V (3 A, 36 W) stay within the PSU's
-   60 W.
+   analog laboratory PSU, two channels of 20 V / 3 A with an adjustable, instant current limit
+   (in series 40 V / 3 A, 120 W), small oscilloscope, 4 Ω / 500 W resistive load. With 40 V in
+   and 4 Ω out, outputs up to about 20 V (5 A, 100 W) stay within the PSU's 120 W. In current
+   limit the PSU behaves roughly like a PV panel (constant voltage, then constant current), so
+   P&O MPPT can be tried on the bench before real panels.
    1. Inputs and outputs without switching: PWR12, fan by temperature with hysteresis;
       backflow and buck stay off.
    2. Protections dry run: all fault flags computed and shown, including the latch (2.5,

@@ -33,11 +33,10 @@ once done.
 
 ## Firmware
 
-- Phase 3: protections (on a fault, `SDWN` first, then PWM = 0), backflow,
-  P&O MPPT / CC-CV, PSU mode, fan, PWR12 check. Several consecutive ADS1115
-  read failures count as a fault. Output over-voltage also trips at
-  `vOutSystemMax` itself, not only at battery max + threshold. Repeated faults
-  latch until confirmed on the LCD (README 2.5, item 8).
+- Phase 3, in the steps of README section 7 (simple first, PSU from panels
+  last). Also: output over-voltage trips at `vOutSystemMax` itself, not only
+  at battery max + threshold; repeated faults latch until confirmed on the LCD
+  (README 2.5, item 8).
 - Phase 4: captive portal and HomeKit accessory; test the fan HomeKit service.
-- OTA, before the unit goes into its enclosure.
-- LCD and menu: test once the display wiring is fixed.
+- OTA: next, before phase 3 (flashing over USB works, but updates in the
+  enclosure should not need a cable).

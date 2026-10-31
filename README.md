@@ -8,9 +8,13 @@ The charging logic is a port of Angelo Casimiro's
 (V1.10, CC0 1.0 / public domain) from Arduino/ESP32 to ESP-IDF/ESP32-S2, running on the
 **MPPT32 v1.1** board (`files/Schematic_MPPT32_2026-09-22.pdf`).
 
-> **Status: phase 2 (measurement and UI) done, untested on hardware.** This document is the
-> agreed specification. The project builds for `esp32s2` on ESP-IDF v5.5.4; control,
-> connectivity and HomeKit follow in phases 3–5 (section 7).
+The main goal is **PSU mode**: a stable regulated output from PV panels **without a battery**,
+which off-the-shelf MPPT chargers do not offer. Battery charging (CC-CV) is kept from FUGU as
+the second mode.
+
+> **Status: phase 2 (measurement and UI) done and running on the hardware** (sensors, LCD,
+> menu, buttons, USB console). This document is the agreed specification. Next: OTA, then
+> phase 3, control (section 7).
 
 ---
 
@@ -489,8 +493,25 @@ Each phase is reviewed and approved before the next starts.
    numbered menu with Device Setup, settings editing, counter persistence, OTA prompt and
    automatic check, reset semantics in `mppt_system`, TH2 gated by Wi-Fi. To be tested from
    USB power without the power stage.
-3. **Control** — `mppt_control`: protection and charging algorithm. First tests with a
-   laboratory PSU instead of a panel, then PV.
+3. **Control** — `mppt_control`: protection, regulation and charging, in steps from simple
+   to complex; each step is tested on the hardware before the next starts. Bench equipment:
+   laboratory PSU 20 V / 3 A with current limit, small oscilloscope, 4 Ω / 500 W resistive
+   load. With 20 V in and 4 Ω out, outputs up to about 12 V (3 A, 36 W) stay within the PSU's
+   60 W.
+   1. Inputs and outputs without switching: PWR12, fan by temperature with hysteresis;
+      backflow and buck stay off.
+   2. Protections dry run: all fault flags computed and shown, including the latch (2.5,
+      item 8); thresholds may be lowered temporarily to trigger them. Buck stays off.
+   3. Shutdown path: `SDWN` first, then PWM = 0; ADS1115 read failures count as a fault.
+      Checked with the oscilloscope.
+   4. Fixed duty cycle from the laboratory PSU into the resistive load: gate drive, inductor
+      ripple (L8 estimate), current and voltage calibration against a multimeter.
+   5. Output voltage regulation (the core of PSU mode) from the laboratory PSU: steady output
+      under load changes, current limit.
+   6. MPPT (P&O) from panels into the resistive load.
+   7. Battery charging (CC-CV), only once a battery is used.
+   8. PSU mode from panels: clouds, load steps, sunset ramp-down and recovery. The most
+      testing and debugging.
 4. **Connectivity** — `captive-wifi` component, Device Setup menu, OTA check; then
    `mppt_hap` and replacement of the template callbacks.
 5. **Extras** — web status page on the device IP, TH2 redundancy, Wh persistence tuning, Eve

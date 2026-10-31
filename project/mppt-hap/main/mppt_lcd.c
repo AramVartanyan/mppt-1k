@@ -454,8 +454,8 @@ static void render_edit(void)
 static const char *dialog_title(void)
 {
     switch (s_dialog) {
-    case DLG_HAP_TOGGLE:     return s_edit.hap_enabled ? "Disable HAP+rst?" : "Enable HAP+rst?";
-    case DLG_WIFI_TOGGLE:    return s_edit.wifi_enabled ? "Disable WiFi+rst" : "Enable WiFi+rst";
+    case DLG_HAP_TOGGLE:     return s_edit.hap_enabled ? "Disable HAP?" : "Enable HAP?";
+    case DLG_WIFI_TOGGLE:    return s_edit.wifi_enabled ? "Disable WiFi?" : "Enable WiFi?";
     case DLG_WIFI_RESET:     return "Reset WiFi?";
     case DLG_HAP_RESET:      return "Reset HAP pair?";
     case DLG_FACTORY:        return "Factory reset?";

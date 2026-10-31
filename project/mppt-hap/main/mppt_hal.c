@@ -167,11 +167,15 @@ esp_err_t mppt_hal_ads_read(uint8_t channel, float *volts)
 /* PCF8574 backpack: one byte per write, bit positions from Kconfig. The
  * hd44780 driver hands us a byte laid out per hd44780_t.pins and raises E in
  * the same write that changes RS and the data lines. The HD44780 needs RS
- * stable before E rises, so put RS and data out first with E low. */
+ * stable before E rises; that matters while the controller is resynchronised
+ * after a chip reset, so during lcd_init() RS and data go out first with E
+ * low. Afterwards one write per edge keeps the display fast. */
+static bool s_lcd_init_writes;
+
 static esp_err_t lcd_write_cb(const hd44780_t *lcd, uint8_t data)
 {
     const uint8_t e = 1 << lcd->pins.e;
-    if (data & e) {
+    if (s_lcd_init_writes && (data & e)) {
         uint8_t setup = data & ~e;
         esp_err_t err = i2c_master_transmit(s_lcd_dev, &setup, 1, 20);
         if (err != ESP_OK) {
@@ -250,7 +254,9 @@ static esp_err_t lcd_init(void)
         return err;
     }
     vTaskDelay(pdMS_TO_TICKS(20));
+    s_lcd_init_writes = true;
     err = hd44780_init(&s_lcd);
+    s_lcd_init_writes = false;
     if (err != ESP_OK) {
         return err;
     }

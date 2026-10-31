@@ -46,7 +46,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | PWR12 | IO4 | in | LM5164 PGOOD (open drain, R26 10 kΩ pull-up): high = 12 V rail OK. EN/UVLO is tied to VIN, the rail is always enabled |
 | SDA1 / SCL1 | IO35 / IO36 | I2C bus 0 | ADS1115 (10 kΩ pull-ups to 3.3 V) |
 | SDA2 / SCL2 | IO9 / IO10 | I2C bus 1 | LCD PCF8574 (10 kΩ pull-ups to 3.3 V, LCD powered from 5 V) |
-| SDA2 / SCL2 (temporary) | IO16 / IO17 | I2C bus 1 | **temporary, test board only.** The hardware is designed for IO9/IO10 and those stay the firmware defaults. On the first prototype IO9, IO10, IO11 and the strapping pin IO46 are shorted together. R40/R41 then pull IO46 high and the chip cannot enter download mode (`boot:0x4`); for flashing, tie T4 pin 3 (SDA2) to pin 1 (GND) or remove R40/R41 and check that IO46 reads 0 V at reset. For bench tests the LCD SDA/SCL are wired straight to IO16/IO17 (module pins 9/10; neighbours IO15 and IO18 unused, so a solder bridge is harmless), not through T4, and selected only in that board's menuconfig (`Bus 1 SDA/SCL`). Avoid IO34 (next to strapping pin IO45). Internal pull-ups are enabled on both buses |
+| SDA2 / SCL2 (temporary) | IO16 / IO17 | I2C bus 1 | **temporary, test board only.** The hardware is designed for IO9/IO10 and those stay the firmware defaults. On the first prototype IO9, IO10, IO11 and the strapping pin IO46 are shorted together. R40/R41 then pull IO46 high and the chip cannot enter download mode (`boot:0x4`); for flashing, tie T4 pin 3 (SDA2) to pin 1 (GND) or remove R40/R41 and check that IO46 reads 0 V at reset. On the test board the SDA2/SCL2 traces are cut between the module and R40/R41, and the resistor side is wired to IO16/IO17 (module pins 9/10; neighbours IO15 and IO18 unused, so a solder bridge is harmless), so T4 and the pull-ups stay in use; the pins are selected only in that board's menuconfig (`Bus 1 SDA/SCL`). Avoid IO34 (next to strapping pin IO45). Internal pull-ups are enabled on both buses |
 | READ | IO39 | in | ADS1115 ALERT/RDY (10 kΩ pull-up) |
 | ADC0 | IO1 | ADC1_CH0 | TH1 (also wired to ADS1115 AIN1 through R27 0 Ω) |
 | ADC1 | IO14 | ADC2_CH3 | TH2 (ADC2 is not usable while Wi-Fi is active on ESP32-S2) |
@@ -283,7 +283,7 @@ a setting separate from HAP for this status page.
 | Wi-Fi enabled | off | on/off; hidden in the menu while HAP is on (HAP keeps Wi-Fi on) | menu |
 | HAP (HomeKit) enabled | off | on/off, requires Wi-Fi (turns it on); change → confirm → reboot | menu |
 | LCD backlight | on | on/off | menu, HomeKit custom "Display" |
-| LCD backlight sleep | 15 s (backlight off at start, a key lights it) | never / 15 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
+| LCD backlight sleep | 10 s (backlight off at start, a key lights it) | never / 10 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
 | Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu |
 | Telemetry counter auto-reset | never | never / day / week / month / year | menu |
 | Serial telemetry mode | 1 (all) | 0 off, 1 all, 2 essential, 3 numbers | menu |

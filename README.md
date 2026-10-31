@@ -50,7 +50,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | READ | IO39 | in | ADS1115 ALERT/RDY (10 kΩ pull-up) |
 | ADC0 | IO1 | ADC1_CH0 | TH1 (also wired to ADS1115 AIN1 through R27 0 Ω) |
 | ADC1 | IO14 | ADC2_CH3 | TH2 (ADC2 is not usable while Wi-Fi is active on ESP32-S2) |
-| DWN / UP / MENU | IO5 / IO6 / IO7 | in, pull-up | buttons |
+| UP / DWN / MENU | IO5 / IO6 / IO7 | in, pull-up | buttons |
 | IO0 | IO0 | in | boot button S2A; HomeKit reset button (3 s Wi-Fi reset, 10 s factory reset) |
 | TXD0 / RXD0 | | UART0 | console / telemetry, T6 header |
 | IO19 / IO20 | | USB D- / D+ | native USB (console optional) |
@@ -283,7 +283,7 @@ a setting separate from HAP for this status page.
 | Wi-Fi enabled | off | on/off; hidden in the menu while HAP is on (HAP keeps Wi-Fi on) | menu |
 | HAP (HomeKit) enabled | off | on/off, requires Wi-Fi (turns it on); change → confirm → reboot | menu |
 | LCD backlight | on | on/off | menu, HomeKit custom "Display" |
-| LCD backlight sleep | never | never / 10 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
+| LCD backlight sleep | 15 s (backlight off at start, a key lights it) | never / 15 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
 | Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu |
 | Telemetry counter auto-reset | never | never / day / week / month / year | menu |
 | Serial telemetry mode | 1 (all) | 0 off, 1 all, 2 essential, 3 numbers | menu |

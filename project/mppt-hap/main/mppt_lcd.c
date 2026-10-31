@@ -263,7 +263,7 @@ static const char *item_label(item_id_t id)
 
 static const char *bl_sleep_name(uint8_t m)
 {
-    static const char *n[] = {"Never", "10s", "5min", "1h", "6h", "12h", "1day", "3day", "1wk", "1mo"};
+    static const char *n[] = {"Never", "15s", "5min", "1h", "6h", "12h", "1day", "3day", "1wk", "1mo"};
     return m < 10 ? n[m] : "?";
 }
 
@@ -604,7 +604,7 @@ static void backlight_tick(void)
         if (s_backlight_on) { mppt_hal_lcd_backlight(false); s_backlight_on = false; }
         return;
     }
-    static const int64_t intervals_s[] = {0, 10, 300, 3600, 21600, 43200, 86400, 259200, 604800, 2419200};
+    static const int64_t intervals_s[] = {0, 15, 300, 3600, 21600, 43200, 86400, 259200, 604800, 2419200};
     uint8_t m = cfg.backlight_sleep < 10 ? cfg.backlight_sleep : 0;
     if (m == 0 || s_mode != UI_PAGES) {
         if (!s_backlight_on) { mppt_hal_lcd_backlight(true); s_backlight_on = true; }
@@ -805,11 +805,14 @@ esp_err_t mppt_ui_start(void)
         return ESP_ERR_NO_MEM;
     }
     mppt_settings_get(&s_edit);
-    s_backlight_on = s_edit.lcd_backlight;
+    /* With a sleep time set the backlight starts off and a key lights it;
+     * otherwise it follows the on/off setting. */
+    s_backlight_on = s_edit.lcd_backlight && s_edit.backlight_sleep == 0;
     if (mppt_hal_lcd_present()) {
         mppt_hal_lcd_backlight(s_backlight_on);
     }
-    s_last_key_us = s_backlight_key_us = esp_timer_get_time();
+    s_last_key_us = esp_timer_get_time();
+    s_backlight_key_us = s_last_key_us - 2419200LL * 1000000LL; /* no key pressed yet */
     buttons_init();
     BaseType_t ok = xTaskCreate(ui_task, "mppt_ui", MPPT_UI_TASK_STACK, NULL,
                                 MPPT_UI_TASK_PRIO, NULL);

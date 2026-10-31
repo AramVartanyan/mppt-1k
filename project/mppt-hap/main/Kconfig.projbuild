@@ -74,12 +74,12 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
         config MPPT_GPIO_BTN_UP
             int "UP button input (active low, internal pull-up)"
             range 0 46
-            default 6
+            default 5
 
         config MPPT_GPIO_BTN_DOWN
             int "DOWN button input (active low, internal pull-up)"
             range 0 46
-            default 5
+            default 6
 
         config MPPT_GPIO_BTN_MENU
             int "MENU button input (active low, internal pull-up)"

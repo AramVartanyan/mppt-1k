@@ -99,9 +99,9 @@ thermistors, LCD and buttons fitted.
 
 ### 1.5 Pending hardware data
 
-- L8: inductance, DC resistance, wire, turns, core dimensions (to be measured). Core material
-  is unknown; saturation will be checked indirectly from ripple current under load.
-- NTC B constant: to be determined from a two-temperature measurement.
+- L8: 60 µH per schematic, 31 turns. Inductance, DC resistance, wire and core dimensions to
+  be taken from the datasheet or measured. Core material is unknown; saturation will be
+  checked indirectly from ripple current under load.
 
 ---
 
@@ -204,6 +204,11 @@ Changed or fixed:
 6. The P&O step (±1 LSB per cycle in FUGU) becomes a Kconfig parameter, default 1.
 7. Battery presets replace free-form voltages as the primary way to configure the battery
    (see 3.2). Free-form voltage/current editing remains available.
+8. Repeated faults latch. As in FUGU, a protection fault (OTE, IOC, OOC, OOV, FLV) stops the
+   power stage and it restarts by itself once the cause clears. If the same kind of fault
+   comes back too often (default: 3 faults within 5 minutes, both Kconfig parameters), the
+   stage stays off until the user confirms on the LCD. Normal states (IUV at sunset, BNC,
+   REC) never count towards the latch.
 
 Kept with changes: `electricalPrice` / `energySavings` stay (default 0.27 EUR/kWh), but the
 price becomes a menu setting and the savings are shown on the LCD only, not in HomeKit.
@@ -496,7 +501,6 @@ Each phase is reviewed and approved before the next starts.
 ## 8. Open items
 
 - L8 parameters (see 1.5).
-- NTC B constant after calibration.
 - ACS712 midpoint auto-calibration: kept exactly as in FUGU for now (whenever the buck is off
   and no FLV/OOV); a plausibility guard (PGOOD high, sensor voltage 2.0–3.0 V) is under
   consideration.

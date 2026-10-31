@@ -492,6 +492,13 @@ OTA through the **`general-ota`** component (`project/common/general-ota`, MIT):
 app descriptor; HomeKit reports it as Firmware Revision and the OTA check compares it
 (`major.minor.patch`, only a strictly newer image is installed).
 
+Versioning rule: every new pull request raises the patch number of `CONFIG_APP_PROJECT_VER` in
+`project/mppt-hap/sdkconfig.defaults` by one (0.1.5 → 0.1.6), once the previous pull request
+is merged into `main`. Further commits to a pull request that is still open keep its version.
+An existing local `sdkconfig` keeps its own value; set it in menuconfig (Application manager →
+Project version) or regenerate `sdkconfig`. A new image is uploaded to `otafw` only after it
+has been tested over USB.
+
 What changed against `fupdateota` and why:
 
 1. No `hap_get_paired_controller_count()` guard and no `FW_UPG_STATUS_*` values: with HAP

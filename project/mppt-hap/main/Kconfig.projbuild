@@ -286,11 +286,21 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
 
         config MPPT_CAL_IIN_ABS_MA
             int "Absolute input current limit (mA)"
+            range 1000 31000
             default 31000
+            help
+                Protection of the ACS712-30A sensor range. In a buck converter the
+                input current stays below the output current, so the output limit
+                below is the one that matters in practice.
 
         config MPPT_CAL_IOUT_ABS_MA
             int "Absolute output current limit (mA)"
-            default 50000
+            range 1000 16000
+            default 16000
+            help
+                The output current flows through L8 (100 uH, 16 A rms rating), so
+                16 A is the hardware limit (FUGU: 50 A). The charging / output
+                current setting is capped at this value.
 
         config MPPT_CAL_VIN_SYS_MIN_MV
             int "Minimum system voltage (mV)"
@@ -487,7 +497,8 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
 
         config MPPT_DEF_CHARGE_CURRENT_CA
             int "Charging current (cA)"
-            default 3000
+            range 0 1600
+            default 1500
 
         config MPPT_DEF_FAN_TEMP_C
             int "Fan on temperature (°C)"

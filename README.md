@@ -32,7 +32,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | Backflow gate supply | B1212S-1W isolated DC/DC | switched by Q4 (SI2306A) |
 | 12 V rail | LM5164 buck from PV input | powers gate driver, fan, 7805 |
 | 5 V / 3.3 V | LM7805 → LD1117V33 | 5 V for ACS712 and LCD; USB 5 V also feeds the 3.3 V LDO |
-| Inductor | L8, 60 µH (schematic) | parameters to be measured |
+| Inductor | L8, 100 µH ±15 %, 16 A rms (schematic says 60 µH) | limits the output current to 16 A, see 1.5 |
 | Fan | 3-wire 12 V fan on T3 (pin 2 = 12 V, pin 3 = switched GND via Q5 SI2306A, pin 1 NC) | on/off only; tachometer wire unconnected, no speed control |
 | Display | 16×2 HD44780 LCD with PCF8574 I2C backpack, T4 connector (5 V) | remove the backpack's SDA/SCL pull-ups R8, R9 (see 1.6) |
 | Buttons | UP, DOWN, MENU, T5 connector, active low, no external pull-ups | internal pull-ups used |
@@ -101,16 +101,35 @@ and without the power stage populated. FUGU's `inputSource = 0` state covers thi
 and 2 (below) can therefore be tested on a board with only the MCU, ADS1115, dividers,
 thermistors, LCD and buttons fitted.
 
-### 1.5 Pending hardware data
+### 1.5 Inductor L8
 
-- L8: 60 µH per schematic, 31 turns. Inductance, DC resistance, wire and core dimensions to
-  be taken from the datasheet or measured. Core material is unknown; saturation will be
-  checked indirectly from ripple current under load.
+- Datasheet values: 100 µH ±15 % (measured at 50 mV / 10 kHz, no DC bias), rated current
+  16 A rms, operating frequency 60 kHz, R_dc max 16 mΩ, wire 1.6 mm enamelled copper, core
+  two stacked powder toroids R38.4/12.5/8.26 with µi = 75. 31 turns counted.
+- The output current flows through L8, so 16 A is the output current limit of the board
+  (`CONFIG_MPPT_CAL_IOUT_ABS_MA`, FUGU: 50 A); the charging / output current setting is
+  capped there. With the 35 V output limit this gives about 560 W, with 50 V about 800 W.
+- A powder core loses inductance gradually under DC bias instead of saturating hard, so at
+  15–16 A the inductance is lower than 100 µH and the ripple larger. Phase 3 step 4 measures
+  the ripple under load.
+- The PWM stays at 39 kHz (the highest frequency with 11-bit resolution on the ESP32-S2
+  LEDC). Ripple at 100 µH, worst case 40 V → 20 V: about 2.6 A peak to peak. Copper loss at
+  15 A: about 3.6 W.
 
 ---
 
 ### 1.6 Assembly notes
 
+Steps for every unit built from MPPT32 v1.1:
+
+- **R27** (0 Ω, TH1 node to ADS1115 AIN1) must be fitted, otherwise AIN1 floats and TH1
+  reads about −5 °C.
+- **Status LED on the TH2 footprint:** anode to 3V3, cathode through a **500 Ω** series
+  resistor to IO14 (see 1.1). Without the resistor nothing limits the current when IO14 is
+  low.
+- **C13/C14: 63 V** electrolytic capacitors. With 35 V parts the output must stay limited to
+  35 V (`CONFIG_MPPT_CAL_VOUT_SYS_MAX_MV` = 35000, the current default); with 63 V parts it
+  can go back to 50000.
 - **LCD backpack: remove R8 and R9** (4.7 kΩ, SDA/SCL pull-ups to the backpack's 5 V).
   With them, SDA/SCL idle at about 4.4 V against R40/R41 (10 kΩ to 3.3 V): above the
   ESP32-S2's 3.3 V I/O limit, and current flows back into the 3.3 V rail. The Wi-Fi PHY
@@ -302,7 +321,7 @@ a setting separate from HAP for this status page.
 | Battery preset | None | see 3.2; the user selects the type after first power-up | menu |
 | Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–35 V (`vOutSystemMax`), 0.1 V step in the menu | menu, HomeKit custom |
 | Battery min voltage | 22.40 V (FUGU) | 0 V – battery max | menu, HomeKit custom |
-| Charging current | 30.0 A | 0–30 A | menu, HomeKit custom |
+| Charging current | 15.0 A | 0–16 A (`currentOutAbsolute`, L8 rating) | menu, HomeKit custom |
 | Fan enabled | on | on/off | menu, HomeKit Fan |
 | Fan on temperature | 60 °C | 0–100 °C | menu |
 | Shutdown temperature | 90 °C | 0–120 °C | menu |
@@ -376,7 +395,7 @@ one step, hold auto-repeat.
 - Calibration: `inVoltageDivRatio` 40.2156, `outVoltageDivRatio` 24.5, current scale 1.33,
   `currentSensV` 0.066 V/A, `currentMidPoint` 2.525 V, averaging counts (3 / 4 / 500),
   `voltageDropout` 1.0 V, `voltageBatteryThresh` 1.5 V, `currentInAbsolute` 31 A,
-  `currentOutAbsolute` 50 A, `vInSystemMin` 10 V, `vOutSystemMax` 35 V (FUGU 50 V), `PPWM_margin` 99.5 %,
+  `currentOutAbsolute` 16 A (L8; FUGU 50 A), `vInSystemMin` 10 V, `vOutSystemMax` 35 V (FUGU 50 V), `PPWM_margin` 99.5 %,
   `PWM_MaxDC` 97 %, `efficiencyRate` 1.0.
 - PWM: frequency 39 kHz, resolution 11 bit (LEDC low-speed mode), P&O step 1.
 - NTC: R25, B, R_fixed, Vdd, circuit mode, TH2 ADC channel.
@@ -430,7 +449,7 @@ Display pages (from FUGU): 1 power + energy + SOC + Vout + Iout; 2 input and out
 Main menu (values shown on the same line, e.g. `>4 BatMax   27.3V`): 1 Battery (preset),
 2 OutMode (Chrg/PSU), 3 Algo (MPPT/CC-CV), 4 BatMax or OutVolt, 5 BatMin, 6 Current,
 7 Charging, 8 Fan, 9 FanTemp, 10 MaxTemp, 11 Backlt, 12 BLsleep, 13 CntRst (auto reset
-period), 14 Price, 15 Telem (0–3), 16 Reset counters, 17 Device Setup, 18 Exit. Settings are
+period), 14 Price, 15 Telem (0–3), 16 Reset energy, 17 Device Setup, 18 Exit. Settings are
 saved when an edit is confirmed. FUGU's separate save/autoload items are not needed: every
 confirmed edit is persisted. The **Device Setup** sub-menu:
 
@@ -565,7 +584,6 @@ Each phase is reviewed and approved before the next starts.
 
 ## 8. Open items
 
-- L8 parameters (see 1.5).
 - ACS712 midpoint auto-calibration: kept exactly as in FUGU for now (whenever the buck is off
   and no FLV/OOV); a plausibility guard (PGOOD high, sensor voltage 2.0–3.0 V) is under
   consideration.

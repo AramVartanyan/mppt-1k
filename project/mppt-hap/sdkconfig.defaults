@@ -44,6 +44,8 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
 # Room for the application web page handlers next to the 8 HAP URIs.
 CONFIG_HAP_HTTP_MAX_URI_HANDLERS=20
 
-# Console: UART0 (T6 header). Switch to USB CDC later if preferred:
-# CONFIG_ESP_CONSOLE_USB_CDC=y
-CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+# Console on the mini-USB port (USB CDC from the ROM, no TinyUSB): log,
+# telemetry, `idf.py flash monitor` with automatic reset into download mode.
+# The ESP32-S2 has a single console, so UART0 (T6) stays free; to go back to
+# it select CONFIG_ESP_CONSOLE_UART_DEFAULT instead.
+CONFIG_ESP_CONSOLE_USB_CDC=y

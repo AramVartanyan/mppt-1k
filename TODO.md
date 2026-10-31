@@ -34,5 +34,4 @@ once done.
   read failures count as a fault.
 - Phase 4: captive portal and HomeKit accessory; test the fan HomeKit service.
 - OTA, before the unit goes into its enclosure.
-- USB CDC console.
 - LCD and menu: test once the display wiring is fixed.

@@ -645,9 +645,14 @@ static void handle_button(mppt_button_event_t ev)
         break;
 
     case UI_MENU:
-        if (ev == MPPT_BTN_UP_SHORT || ev == MPPT_BTN_UP_HOLD) {
+        /* a press wraps around at either end; auto-repeat stops there */
+        if (ev == MPPT_BTN_UP_SHORT) {
+            s_sel = s_sel > 0 ? s_sel - 1 : s_item_count - 1;
+        } else if (ev == MPPT_BTN_UP_HOLD) {
             if (s_sel > 0) s_sel--;
-        } else if (ev == MPPT_BTN_DOWN_SHORT || ev == MPPT_BTN_DOWN_HOLD) {
+        } else if (ev == MPPT_BTN_DOWN_SHORT) {
+            s_sel = s_sel < s_item_count - 1 ? s_sel + 1 : 0;
+        } else if (ev == MPPT_BTN_DOWN_HOLD) {
             if (s_sel < s_item_count - 1) s_sel++;
         } else if (ev == MPPT_BTN_MENU_SHORT) {
             item_activate(s_items[s_sel]);
@@ -805,11 +810,14 @@ esp_err_t mppt_ui_start(void)
         return ESP_ERR_NO_MEM;
     }
     mppt_settings_get(&s_edit);
-    s_backlight_on = s_edit.lcd_backlight;
+    /* With a sleep time set the backlight starts off and a key lights it;
+     * otherwise it follows the on/off setting. */
+    s_backlight_on = s_edit.lcd_backlight && s_edit.backlight_sleep == 0;
     if (mppt_hal_lcd_present()) {
         mppt_hal_lcd_backlight(s_backlight_on);
     }
-    s_last_key_us = s_backlight_key_us = esp_timer_get_time();
+    s_last_key_us = esp_timer_get_time();
+    s_backlight_key_us = s_last_key_us - 2419200LL * 1000000LL; /* no key pressed yet */
     buttons_init();
     BaseType_t ok = xTaskCreate(ui_task, "mppt_ui", MPPT_UI_TASK_STACK, NULL,
                                 MPPT_UI_TASK_PRIO, NULL);

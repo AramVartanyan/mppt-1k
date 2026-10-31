@@ -165,10 +165,23 @@ esp_err_t mppt_hal_ads_read(uint8_t channel, float *volts)
 
 #ifdef CONFIG_MPPT_LCD_ENABLE
 /* PCF8574 backpack: one byte per write, bit positions from Kconfig. The
- * hd44780 driver hands us a byte laid out per hd44780_t.pins. */
+ * hd44780 driver hands us a byte laid out per hd44780_t.pins and raises E in
+ * the same write that changes RS and the data lines. The HD44780 needs RS
+ * stable before E rises; that matters while the controller is resynchronised
+ * after a chip reset, so during lcd_init() RS and data go out first with E
+ * low. Afterwards one write per edge keeps the display fast. */
+static bool s_lcd_init_writes;
+
 static esp_err_t lcd_write_cb(const hd44780_t *lcd, uint8_t data)
 {
-    (void)lcd;
+    const uint8_t e = 1 << lcd->pins.e;
+    if (s_lcd_init_writes && (data & e)) {
+        uint8_t setup = data & ~e;
+        esp_err_t err = i2c_master_transmit(s_lcd_dev, &setup, 1, 20);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
     return i2c_master_transmit(s_lcd_dev, &data, 1, 20);
 }
 
@@ -229,9 +242,21 @@ static esp_err_t lcd_init(void)
             .d7 = CONFIG_MPPT_LCD_PIN_D4 + 3,
             .bl = CONFIG_MPPT_LCD_PIN_BL,
         },
-        .backlight = true,
+        .backlight = false,                    /* the UI decides when to light it */
     };
+    /* After a chip reset (monitor, OTA) the LCD keeps power and its state, and
+     * the PCF8574 keeps the last byte, possibly with E high mid-transfer.
+     * Drop E, RS and the backlight before hd44780_init() resynchronises the
+     * controller and clears the display. */
+    uint8_t idle = 0;
+    err = i2c_master_transmit(s_lcd_dev, &idle, 1, 20);
+    if (err != ESP_OK) {
+        return err;
+    }
+    vTaskDelay(pdMS_TO_TICKS(20));
+    s_lcd_init_writes = true;
     err = hd44780_init(&s_lcd);
+    s_lcd_init_writes = false;
     if (err != ESP_OK) {
         return err;
     }

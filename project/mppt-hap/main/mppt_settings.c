@@ -38,7 +38,7 @@ void mppt_settings_defaults(mppt_settings_t *o)
     o->wifi_enabled = false;
     o->hap_enabled = false;
     o->lcd_backlight = true;
-    o->backlight_sleep = 0;
+    o->backlight_sleep = 1;     /* 10 s */
     o->counter_reset = 0;
     o->telemetry_mode = MPPT_DEF_TELEMETRY_MODE;
     o->energy_price = MPPT_DEF_ENERGY_PRICE;

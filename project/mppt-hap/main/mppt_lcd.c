@@ -229,7 +229,10 @@ static void render_pages(void)
         }
         break;
     default: /* savings */
-        snprintf(l1, sizeof(l1), "SAVED %7.2f EUR", st.wh / 1000.0 * cfg.energy_price);
+    {
+        double eur = st.wh / 1000.0 * cfg.energy_price;   /* "SAVED " + 6 + " EUR" = 16 */
+        snprintf(l1, sizeof(l1), eur < 1000.0 ? "SAVED %6.2f EUR" : "SAVED %6.0f EUR", eur);
+    }
         snprintf(l2, sizeof(l2), "%6.2fkWh @%4.2f", st.wh / 1000.0, cfg.energy_price);
         break;
     }
@@ -256,7 +259,7 @@ static const char *item_label(item_id_t id)
     case IT_CNTRESET:  return "CntRst";
     case IT_PRICE:     return "Price";
     case IT_TELEM:     return "Telem";
-    case IT_RESETCNT:  return "Reset counters";
+    case IT_RESETCNT:  return "Reset energy";     /* ">16 " + 12 = 16 columns */
     case IT_DEVSETUP:  return "Device Setup";
     case IT_EXIT:      return "Exit";
     case IT_HAP:       return s_edit.hap_enabled ? "Disable HAP" : "Enable HAP";
@@ -457,9 +460,9 @@ static const char *dialog_title(void)
     case DLG_HAP_TOGGLE:     return s_edit.hap_enabled ? "Disable HAP?" : "Enable HAP?";
     case DLG_WIFI_TOGGLE:    return s_edit.wifi_enabled ? "Disable WiFi?" : "Enable WiFi?";
     case DLG_WIFI_RESET:     return "Reset WiFi?";
-    case DLG_HAP_RESET:      return "Reset HAP pair?";
+    case DLG_HAP_RESET:      return "Unpair HomeKit?";
     case DLG_FACTORY:        return "Factory reset?";
-    case DLG_RESET_COUNTERS: return "Reset counters?";
+    case DLG_RESET_COUNTERS: return "Reset energy?";
     case DLG_OTA:            return "Update Firmware?";
     default:                 return "";
     }
@@ -661,7 +664,7 @@ static void handle_button(mppt_button_event_t ev)
         if (ev == MPPT_BTN_UP_SHORT)   s_page = (s_page + PAGE_COUNT - 1) % PAGE_COUNT;
         if (ev == MPPT_BTN_DOWN_SHORT) s_page = (s_page + 1) % PAGE_COUNT;
         if (ev == MPPT_BTN_MENU_SHORT) menu_open();
-        if (ev == MPPT_BTN_MENU_LONG)  mppt_ui_message("Keep holding 10s", "for factory rst", 3000);
+        if (ev == MPPT_BTN_MENU_LONG)  mppt_ui_message("Hold 10s for", "factory reset", 3000);
         break;
 
     case UI_MENU:

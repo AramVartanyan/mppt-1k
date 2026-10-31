@@ -120,6 +120,16 @@ thermistors, LCD and buttons fitted.
 
 ### 1.6 Assembly notes
 
+Steps for every unit built from MPPT32 v1.1:
+
+- **R27** (0 Ω, TH1 node to ADS1115 AIN1) must be fitted, otherwise AIN1 floats and TH1
+  reads about −5 °C.
+- **Status LED on the TH2 footprint:** anode to 3V3, cathode through a **500 Ω** series
+  resistor to IO14 (see 1.1). Without the resistor nothing limits the current when IO14 is
+  low.
+- **C13/C14: 63 V** electrolytic capacitors. With 35 V parts the output must stay limited to
+  35 V (`CONFIG_MPPT_CAL_VOUT_SYS_MAX_MV` = 35000, the current default); with 63 V parts it
+  can go back to 50000.
 - **LCD backpack: remove R8 and R9** (4.7 kΩ, SDA/SCL pull-ups to the backpack's 5 V).
   With them, SDA/SCL idle at about 4.4 V against R40/R41 (10 kΩ to 3.3 V): above the
   ESP32-S2's 3.3 V I/O limit, and current flows back into the 3.3 V rail. The Wi-Fi PHY
@@ -439,7 +449,7 @@ Display pages (from FUGU): 1 power + energy + SOC + Vout + Iout; 2 input and out
 Main menu (values shown on the same line, e.g. `>4 BatMax   27.3V`): 1 Battery (preset),
 2 OutMode (Chrg/PSU), 3 Algo (MPPT/CC-CV), 4 BatMax or OutVolt, 5 BatMin, 6 Current,
 7 Charging, 8 Fan, 9 FanTemp, 10 MaxTemp, 11 Backlt, 12 BLsleep, 13 CntRst (auto reset
-period), 14 Price, 15 Telem (0–3), 16 Reset counters, 17 Device Setup, 18 Exit. Settings are
+period), 14 Price, 15 Telem (0–3), 16 Reset energy, 17 Device Setup, 18 Exit. Settings are
 saved when an edit is confirmed. FUGU's separate save/autoload items are not needed: every
 confirmed edit is persisted. The **Device Setup** sub-menu:
 

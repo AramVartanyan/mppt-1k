@@ -374,7 +374,10 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
 
         config MPPT_NTC2_ENABLE
             bool "Read redundant TH2 on the on-chip ADC (only while Wi-Fi is off)"
-            default y
+            default n
+            help
+                Off by default: on the MPPT32 v1.1 test board TH2 is not fitted
+                and a Wi-Fi LED sits in its place on IO14.
 
         config MPPT_NTC2_ADC_UNIT
             int "TH2 ADC unit (1 or 2; IO14 is ADC2)"

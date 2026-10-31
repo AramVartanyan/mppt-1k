@@ -32,7 +32,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | Fan | 3-wire 12 V fan on T3 (pin 2 = 12 V, pin 3 = switched GND via Q5 SI2306A, pin 1 NC) | on/off only; tachometer wire unconnected, no speed control |
 | Display | 16×2 HD44780 LCD with PCF8574 I2C backpack, T4 connector (5 V) | |
 | Buttons | UP, DOWN, MENU, T5 connector, active low, no external pull-ups | internal pull-ups used |
-| Thermistors | TH1, TH2, 10 kΩ NTC, on PCB between the TO-220 MOSFETs | |
+| Thermistors | TH1, TH2, 10 kΩ NTC, on PCB between the TO-220 MOSFETs | test board: TH2 not fitted, a Wi-Fi LED in its place |
 | Protection | 30 A fuses F1/F2, VDR R1, TVS on USB | |
 
 ### 1.1 GPIO map (ESP32-S2)
@@ -49,7 +49,7 @@ Synchronous buck MPPT charger, same electrical topology and sensing chain as FUG
 | SDA2 / SCL2 (temporary) | IO16 / IO17 | I2C bus 1 | **temporary, test board only.** The hardware is designed for IO9/IO10 and those stay the firmware defaults. On the first prototype IO9, IO10, IO11 and the strapping pin IO46 are shorted together. R40/R41 then pull IO46 high and the chip cannot enter download mode (`boot:0x4`); for flashing, tie T4 pin 3 (SDA2) to pin 1 (GND) or remove R40/R41 and check that IO46 reads 0 V at reset. On the test board the SDA2/SCL2 traces are cut between the module and R40/R41, and the resistor side is wired to IO16/IO17 (module pins 9/10; neighbours IO15 and IO18 unused, so a solder bridge is harmless), so T4 and the pull-ups stay in use; the pins are selected only in that board's menuconfig (`Bus 1 SDA/SCL`). Avoid IO34 (next to strapping pin IO45). Internal pull-ups are enabled on both buses |
 | READ | IO39 | in | ADS1115 ALERT/RDY (10 kΩ pull-up) |
 | ADC0 | IO1 | ADC1_CH0 | TH1 (also wired to ADS1115 AIN1 through R27 0 Ω) |
-| ADC1 | IO14 | ADC2_CH3 | TH2 (ADC2 is not usable while Wi-Fi is active on ESP32-S2) |
+| ADC1 | IO14 | ADC2_CH3 | TH2 (ADC2 is not usable while Wi-Fi is active on ESP32-S2). Test board: TH2 not fitted; a Wi-Fi LED sits in its place (anode to 3V3, cathode to IO14 and R39, active low), not used yet because it has no series resistor |
 | UP / DWN / MENU | IO5 / IO6 / IO7 | in, pull-up | buttons |
 | IO0 | IO0 | in | boot button S2A; HomeKit reset button (3 s Wi-Fi reset, 10 s factory reset) |
 | TXD0 / RXD0 | | UART0 | T6 header; console only when selected instead of USB |
@@ -85,6 +85,7 @@ Against the Semitec resistance table the Beta formula with B = 3435 is within
 - **TH1 is the primary sensor**, read through ADS1115 AIN1 (16-bit, independent of Wi-Fi).
   AIN1 is connected to the TH1 node only through R27 (0 Ω); without R27 the input floats.
 - **TH2 is redundant**, read through IO14 (ADC2) with `ntc_driver`, only while Wi-Fi is off.
+  Off by default (`CONFIG_MPPT_NTC2_ENABLE`), since TH2 is not fitted on the test board.
 
 ### 1.4 Power for bench testing
 

@@ -616,7 +616,11 @@ static void backlight_tick(void)
     }
     static const int64_t intervals_s[] = {0, 10, 300, 3600, 21600, 43200, 86400, 259200, 604800, 2419200};
     uint8_t m = cfg.backlight_sleep < 10 ? cfg.backlight_sleep : 0;
-    if (m == 0 || s_mode != UI_PAGES) {
+    /* stay lit outside the pages and while a firmware update downloads or
+     * waits for the reboot (a plain version check does not light it) */
+    general_ota_state_t ota = general_ota_get_state();
+    bool ota_running = ota == GENERAL_OTA_DOWNLOADING || ota == GENERAL_OTA_SUCCESS;
+    if (m == 0 || s_mode != UI_PAGES || ota_running) {
         if (!s_backlight_on) { mppt_hal_lcd_backlight(true); s_backlight_on = true; }
         return;
     }

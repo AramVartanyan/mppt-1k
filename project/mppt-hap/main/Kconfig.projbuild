@@ -461,6 +461,14 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
             int "Automatic firmware check after Wi-Fi connect (s, 0 = off)"
             default 60
 
+        config MPPT_OTA_RECHECK_DAYS
+            int "Repeat the automatic firmware check every N days (0 = only after connect)"
+            range 0 30
+            default 7
+            help
+                Each repeated check asks again even for a version the user declined
+                before, so a declined update is offered again after this time.
+
         config MPPT_TELEMETRY_INTERVAL_MS
             int "Serial telemetry line interval (ms)"
             default 1000

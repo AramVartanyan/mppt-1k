@@ -35,6 +35,9 @@ void mppt_ui_message(const char *line1, const char *line2, uint32_t hold_ms);
  * Ignored when the same version was already declined in this boot. */
 void mppt_ui_ota_offer(const char *version);
 
+/* Forget a declined version so the next check offers it again. */
+void mppt_ui_ota_forget_declined(void);
+
 #ifdef __cplusplus
 }
 #endif

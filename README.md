@@ -309,7 +309,7 @@ a setting separate from HAP for this status page.
 | Wi-Fi enabled | off | on/off; hidden in the menu while HAP is on (HAP keeps Wi-Fi on) | menu |
 | HAP (HomeKit) enabled | off | on/off, requires Wi-Fi (turns it on); change → confirm → reboot | menu |
 | LCD backlight | on | on/off | menu, HomeKit custom "Display" |
-| LCD backlight sleep | 10 s (backlight off at start, a key lights it) | never / 10 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
+| LCD backlight sleep | 10 s (backlight off at start; the first key only lights it and does nothing else; stays on during a firmware download) | never / 10 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
 | Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu |
 | Telemetry counter auto-reset | never | never / day / week / month / year | menu |
 | Serial telemetry mode | 1 (all) | 0 off, 1 all, 2 essential, 3 numbers | menu |
@@ -505,10 +505,12 @@ What changed against `fupdateota` and why:
    after `success` (power stage stopped first).
 4. `REQUIRES mbedtls` in the component, so `esp_crt_bundle.h` resolves on ESP-IDF 5.5.
 
-Update policy: an automatic **check** runs 1 minute after Wi-Fi connects. When a newer image
+Update policy: an automatic **check** runs 1 minute after Wi-Fi connects and then every
+`CONFIG_MPPT_OTA_RECHECK_DAYS` (default 7 days, 0 = only after connect). When a newer image
 exists the LCD shows `Update Firmware?  Yes / No` with **No** selected; the prompt stays until
 the user answers (UP/DOWN moves, MENU confirms). Yes → power stage off → download with
-progress → reboot. No → not asked again until the next boot or a newer version appears.
+progress → reboot. No → not asked again until the next automatic check (a week later), the
+next boot, or a newer version.
 Installation is never started without this confirmation, because the update reboots the
 device and cuts the output while the load may be powered. Device Setup → FW Update runs the
 same check and prompt on demand (for devices that have not rebooted for a long time).

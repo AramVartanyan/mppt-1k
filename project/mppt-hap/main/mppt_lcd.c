@@ -634,11 +634,17 @@ static void backlight_tick(void)
 static void handle_button(mppt_button_event_t ev)
 {
     s_last_key_us = esp_timer_get_time();
+    /* a key that only lights the dark backlight does nothing else, so the
+     * screen can be read first and a stray MENU press selects nothing */
+    bool was_dark = !s_backlight_on && s_edit.lcd_backlight;
     backlight_wake();
 
     if (ev == MPPT_BTN_MENU_RESET) {
         lcd_lines("Factory reset", "Rebooting...");
         mppt_system_factory_reset();
+        return;
+    }
+    if (was_dark) {
         return;
     }
 
@@ -725,6 +731,11 @@ static void handle_button(mppt_button_event_t ev)
         }
         break;
     }
+}
+
+void mppt_ui_ota_forget_declined(void)
+{
+    s_ota_declined[0] = 0;
 }
 
 void mppt_ui_ota_offer(const char *version)

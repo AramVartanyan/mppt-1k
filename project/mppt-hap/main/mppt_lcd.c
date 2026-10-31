@@ -16,6 +16,7 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "driver/gpio.h"
 #include "iot_button.h"
 #include "general_ota.h"
 #include "captive_wifi.h"
@@ -81,7 +82,16 @@ static char s_ota_declined[GENERAL_OTA_VERSION_LEN];
 
 static void btn_cb(void *arg)
 {
-    mppt_ui_button_event((mppt_button_event_t)(intptr_t)arg);
+    mppt_button_event_t ev = (mppt_button_event_t)(intptr_t)arg;
+    /* The button library starts the auto-repeat timer already in
+     * iot_button_set_serial_cb(), so UP/DOWN repeat events arrive from boot
+     * until the key is first released. Accept them only while the key is
+     * actually held (active low). */
+    if ((ev == MPPT_BTN_UP_HOLD && gpio_get_level(MPPT_GPIO_BTN_UP) != 0) ||
+        (ev == MPPT_BTN_DOWN_HOLD && gpio_get_level(MPPT_GPIO_BTN_DOWN) != 0)) {
+        return;
+    }
+    mppt_ui_button_event(ev);
 }
 
 static void buttons_init(void)

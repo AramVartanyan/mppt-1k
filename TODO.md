@@ -35,3 +35,9 @@ once done.
 - Phase 4: captive portal and HomeKit accessory; test the fan HomeKit service.
 - OTA, before the unit goes into its enclosure.
 - LCD and menu: test once the display wiring is fixed.
+- Button library (`AramVartanyan/button`): `iot_button_set_serial_cb()` starts
+  the auto-repeat timer at registration, so repeat events arrive from boot
+  until the key is first released. `mppt_lcd.c` filters them for now. Fix it
+  in the library (the period is already set on every press, so the
+  `xTimerChangePeriod()` call in `iot_button_set_serial_cb()` can go) once all
+  devices that use serial callbacks can be tested.

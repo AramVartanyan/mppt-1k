@@ -63,6 +63,14 @@ const char *mppt_settings_preset_name(mppt_battery_preset_t p)
     return (p < MPPT_BATT_PRESET_COUNT) ? names[p] : "?";
 }
 
+/* Keep the voltages within the hardware limit, whatever wrote them
+ * (menu, preset, NVS from an older build, HomeKit). */
+static void clamp_voltages(mppt_settings_t *s)
+{
+    if (s->vbat_max > MPPT_CAL_VOUT_SYS_MAX) s->vbat_max = MPPT_CAL_VOUT_SYS_MAX;
+    if (s->vbat_min > s->vbat_max) s->vbat_min = s->vbat_max;
+}
+
 static esp_err_t store(void)
 {
     return ContainerNvsSet(NS, KEY_SETTINGS, (const uint8_t *)&s_settings, sizeof(s_settings));
@@ -78,6 +86,7 @@ esp_err_t mppt_settings_init(void)
     esp_err_t err = ContainerNvsGet(NS, KEY_SETTINGS, (uint8_t *)&loaded, &len);
     if (err == ESP_OK && len == sizeof(loaded) && loaded.version == SETTINGS_VERSION) {
         s_settings = loaded;
+        clamp_voltages(&s_settings);
         ESP_LOGI(TAG, "settings loaded from NVS");
         return ESP_OK;
     }
@@ -105,6 +114,7 @@ esp_err_t mppt_settings_set(const mppt_settings_t *in)
         n.vbat_max = vmax;
         n.vbat_min = vmin;
     }
+    clamp_voltages(&n);
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     s_settings = n;
     esp_err_t err = store();

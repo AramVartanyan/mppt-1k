@@ -278,8 +278,8 @@ a setting separate from HAP for this status page.
 | Output mode | Charger | Charger / PSU (regulated output voltage, battery optional) | menu, HomeKit custom |
 | MPPT algorithm | on | on = MPPT, off = CC-CV only | menu, HomeKit custom |
 | Battery preset | None | see 3.2; the user selects the type after first power-up | menu |
-| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–50 V, 0.1 V step in the menu | menu, HomeKit custom |
-| Battery min voltage | 22.40 V (FUGU) | 0–50 V | menu, HomeKit custom |
+| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–35 V (`vOutSystemMax`), 0.1 V step in the menu | menu, HomeKit custom |
+| Battery min voltage | 22.40 V (FUGU) | 0 V – battery max | menu, HomeKit custom |
 | Charging current | 30.0 A | 0–30 A | menu, HomeKit custom |
 | Fan enabled | on | on/off | menu, HomeKit Fan |
 | Fan on temperature | 60 °C | 0–100 °C | menu |
@@ -306,8 +306,10 @@ The preset sets max/min voltage; the user can still edit both afterwards.
 | 24 V LiFePO4 (8S) | 28.80 V | 24.00 V | |
 | Custom | user-set | user-set | |
 
-Default preset is **None**. Hardware limit `vOutSystemMax = 50 V` (as in FUGU), so 48 V
-systems are not offered. Preset voltages confirmed.
+Default preset is **None**. Hardware limit `vOutSystemMax` = 35 V (`CONFIG_MPPT_CAL_VOUT_SYS_MAX_MV`):
+the output capacitors C13/C14 on MPPT32 v1.1 are rated 35 V. FUGU uses 50 V; that value
+returns once C13/C14 are 63 V parts. 50 V is the ceiling in any case, since the SMD
+capacitors on the output are rated 50 V. 48 V systems are not offered. Preset voltages confirmed.
 
 Defined states (no undefined combination):
 
@@ -332,7 +334,7 @@ one step, hold auto-repeat.
 - Calibration: `inVoltageDivRatio` 40.2156, `outVoltageDivRatio` 24.5, current scale 1.33,
   `currentSensV` 0.066 V/A, `currentMidPoint` 2.525 V, averaging counts (3 / 4 / 500),
   `voltageDropout` 1.0 V, `voltageBatteryThresh` 1.5 V, `currentInAbsolute` 31 A,
-  `currentOutAbsolute` 50 A, `vInSystemMin` 10 V, `vOutSystemMax` 50 V, `PPWM_margin` 99.5 %,
+  `currentOutAbsolute` 50 A, `vInSystemMin` 10 V, `vOutSystemMax` 35 V (FUGU 50 V), `PPWM_margin` 99.5 %,
   `PWM_MaxDC` 97 %, `efficiencyRate` 1.0.
 - PWM: frequency 39 kHz, resolution 11 bit (LEDC low-speed mode), P&O step 1.
 - NTC: R25, B, R_fixed, Vdd, circuit mode, TH2 ADC channel.

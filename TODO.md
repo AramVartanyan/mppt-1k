@@ -18,6 +18,10 @@ once done.
 - **Status LED** has no pin of its own and sits on the TH2 footprint (IO14). On
   the next board revision give it a dedicated pin, so TH2 and the LED can both
   be fitted.
+- **Output capacitors C13/C14** are rated 35 V, so the output is limited to
+  35 V (`CONFIG_MPPT_CAL_VOUT_SYS_MAX_MV`). Replace them with 63 V parts, then
+  set the limit back to FUGU's 50 V (the ceiling: the SMD output capacitors
+  are rated 50 V).
 - **R27** (0 Ω, TH1 node to ADS1115 AIN1) must be fitted, otherwise AIN1
   floats and TH1 reads about −5 °C. TH1 is also wired directly to IO1
   (ADC1_CH0), which could serve as a backup reading.
@@ -32,7 +36,8 @@ once done.
 
 - Phase 3: protections (on a fault, `SDWN` first, then PWM = 0), backflow,
   P&O MPPT / CC-CV, PSU mode, fan, PWR12 check. Several consecutive ADS1115
-  read failures count as a fault.
+  read failures count as a fault. Output over-voltage also trips at
+  `vOutSystemMax` itself, not only at battery max + threshold.
 - Phase 4: captive portal and HomeKit accessory; test the fan HomeKit service.
 - OTA, before the unit goes into its enclosure.
 - LCD and menu: test once the display wiring is fixed.

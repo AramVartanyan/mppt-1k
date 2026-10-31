@@ -645,9 +645,14 @@ static void handle_button(mppt_button_event_t ev)
         break;
 
     case UI_MENU:
-        if (ev == MPPT_BTN_UP_SHORT || ev == MPPT_BTN_UP_HOLD) {
+        /* a press wraps around at either end; auto-repeat stops there */
+        if (ev == MPPT_BTN_UP_SHORT) {
+            s_sel = s_sel > 0 ? s_sel - 1 : s_item_count - 1;
+        } else if (ev == MPPT_BTN_UP_HOLD) {
             if (s_sel > 0) s_sel--;
-        } else if (ev == MPPT_BTN_DOWN_SHORT || ev == MPPT_BTN_DOWN_HOLD) {
+        } else if (ev == MPPT_BTN_DOWN_SHORT) {
+            s_sel = s_sel < s_item_count - 1 ? s_sel + 1 : 0;
+        } else if (ev == MPPT_BTN_DOWN_HOLD) {
             if (s_sel < s_item_count - 1) s_sel++;
         } else if (ev == MPPT_BTN_MENU_SHORT) {
             item_activate(s_items[s_sel]);

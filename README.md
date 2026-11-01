@@ -244,7 +244,7 @@ Changed or fixed:
    REC) never count towards the latch.
 
 Kept with changes: `electricalPrice` / `energySavings` stay (default 0.27 EUR/kWh), but the
-price becomes a menu setting and the savings are shown on the LCD only, not in HomeKit.
+price becomes a menu setting (also writable from HomeKit) and the savings are shown on the LCD only, not in HomeKit.
 
 Dropped: Blynk telemetry, Bluetooth flag, dual-core task pinning, the Arduino `String`
 firmware info strings (replaced by `CONFIG_APP_PROJECT_VER`), the Light Sensor service of the
@@ -316,20 +316,20 @@ a setting separate from HAP for this status page.
 | Setting | Default | Range / values | Source |
 |---|---|---|---|
 | Charging enabled | on | on/off | menu, HomeKit Switch |
-| Output mode | Charger | Charger / PSU (regulated output voltage, battery optional) | menu, HomeKit custom |
-| MPPT algorithm | on | on = MPPT, off = CC-CV only | menu, HomeKit custom |
+| Output mode | Charger | Charger / PSU (regulated output voltage, battery optional) | menu |
+| MPPT algorithm | on | on = MPPT, off = CC-CV only | menu |
 | Battery preset | None | see 3.2; the user selects the type after first power-up | menu |
-| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–35 V (`vOutSystemMax`), 0.1 V step in the menu | menu, HomeKit custom |
-| Battery min voltage | 22.40 V (FUGU) | 0 V – battery max | menu, HomeKit custom |
-| Charging current | 15.0 A | 0–16 A (`currentOutAbsolute`, L8 rating) | menu, HomeKit custom |
-| Fan enabled | on | on/off | menu, HomeKit Fan |
+| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–35 V (`vOutSystemMax`), 0.1 V step in the menu | menu |
+| Battery min voltage | 22.40 V (FUGU) | 0 V – battery max | menu |
+| Charging current | 15.0 A | 0–16 A (`currentOutAbsolute`, L8 rating) | menu |
+| Fan enabled | on | on/off | menu (HomeKit can only add a manual run, see 5) |
 | Fan on temperature | 60 °C | 0–100 °C | menu |
 | Shutdown temperature | 90 °C | 0–120 °C | menu |
 | Wi-Fi enabled | off | on/off; hidden in the menu while HAP is on (HAP keeps Wi-Fi on) | menu |
 | HAP (HomeKit) enabled | off | on/off, requires Wi-Fi (turns it on); change → confirm → reboot | menu |
-| LCD backlight | on | on/off | menu, HomeKit custom "Display" |
+| LCD backlight | on | on/off | menu |
 | LCD backlight sleep | 10 s (backlight off at start; the first key only lights it and does nothing else; stays on during a firmware download) | never / 10 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
-| Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu |
+| Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu, HomeKit custom |
 | Telemetry counter auto-reset | never | never / day / week / month / year | menu |
 | Serial telemetry mode | 1 (all) | 0 off, 1 all, 2 essential, 3 numbers | menu |
 | Wh, kWh, run time | 0 | persisted counters, see 3.4 | automatic |
@@ -474,21 +474,45 @@ namespaces instead.
 
 ## 5. HomeKit model
 
-One accessory (category Switch), enabled only when the "HAP enabled" setting is on.
+One accessory (category Outlet), enabled only when the "HAP enabled" setting is on. The
+Apple Home app shows only standard services; the two custom characteristics are visible in
+Eve, Controller for HomeKit or Home+. Settings are made from the LCD menu, before the
+hardware is connected, and are not changed over HomeKit (apart from the energy price).
 
-| Service | Characteristics | Source |
+| Service | Characteristics | Notes |
 |---|---|---|
-| Accessory Information | name `MPPT-xxxxxx`, manufacturer, model, serial = Wi-Fi MAC, firmware = `CONFIG_APP_PROJECT_VER`, hardware = 1.1 | Kconfig |
-| Switch "Charger" | On = charging enabled | `chargingPause` inverted |
-| ↳ custom (existing) | Display (LCD backlight) | existing template; the OTA trigger/status characteristics are dropped, OTA is driven from the LCD menu |
-| ↳ custom (writable) | Output Mode, MPPT Mode, Battery Max V, Battery Min V, Charging Current | menu settings |
-| ↳ custom (read-only, later) | Vin, Iin, Vout, Iout, PWM, error bitmask, Wh (Eve UUIDs for Eve app history) | deferred |
-| Battery Service | Battery Level = SOC %, Charging State = charging / not charging / not chargeable (PSU or preset "None"), Status Low Battery (< 10 %) | Blynk LED1–3 |
-| Temperature Sensor | Current Temperature = TH1, Status Fault = OTE | display page 4 |
-| Fan v1 | On = fan running; write = fan override | System_Processes |
+| Accessory Information | name `MPPT-xxxxxx`, manufacturer `Armo Ltd.`, model `MPPT32`, serial = Wi-Fi MAC, firmware = `CONFIG_APP_PROJECT_VER`, hardware `1.1` | Kconfig |
+| Outlet "Output" (primary) | **On** = output enabled (Off → soft stop in PSU mode, see 3.2); **Outlet In Use** = the output delivers current (I_out above about 0.2 A) | allows automations such as switching the output off at night |
+| ↳ Eve Total Consumption (custom, read) | energy in kWh (`E863F10C`) | sent **only when a controller reads it**, never as a notification |
+| ↳ Energy price (custom, read/write) | EUR/kWh, same range as the menu (0–9.99) | faster to type on a phone than to step through in the menu |
+| Temperature Sensor | Current Temperature = TH1; **Status Fault** on over-temperature or a failed sensor | |
+| Fan | **Active** (read/write), see below | the local control always has priority |
+| Battery Service | Battery Level, Charging State, Status Low Battery | present in every mode, so a mode change never needs removing and re-pairing the accessory |
 
-With battery preset "None" the Battery service reports **100 %** and "not chargeable", so the
-Home app does not raise low-battery warnings.
+Battery Service by mode:
+
+- Charger mode with a battery preset: Battery Level = SOC %; Charging State = charging while
+  the power stage runs, not charging otherwise (no sun, fault, output off); Status Low
+  Battery below 10 %.
+- PSU mode (or preset "None"): Battery Level = 100 %; Charging State = charging while the
+  power stage runs, not charging without sun; Status Low Battery never set.
+
+Fan (life support of the device, the local temperature control always wins):
+
+- The fan runs when the temperature control wants it on (fan-on temperature, over-temperature)
+  or when HomeKit switched it on.
+- HomeKit can switch the fan on and off only while the temperature control has it off. A
+  HomeKit On lasts until HomeKit Off or a reboot.
+- If the temperature reaches the fan-on threshold, the temperature control takes over and
+  clears the HomeKit On. When the temperature falls back, the fan stops as the settings say,
+  and Active = Off is sent to HomeKit.
+- A HomeKit Off while the temperature control has the fan on is answered with success (HAP
+  expects an immediate answer), the fan keeps running, and Active = On is sent back about
+  1 s later.
+
+Dropped from the earlier template: the Switch "Charger", the Display (LCD backlight) custom
+characteristic, and custom characteristics for settings (output voltage, current, mode, MPPT).
+Notifications are pushed at most every 2 s and only on changes above a threshold.
 
 HAP pairing reset: IO0 held 3 s resets Wi-Fi credentials, 10 s resets to factory; both also
 available from the Device Setup menu, and factory reset also via MENU held 10 s.

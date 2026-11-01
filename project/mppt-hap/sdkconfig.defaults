@@ -3,7 +3,7 @@ CONFIG_IDF_TARGET="esp32s2"
 # Firmware version: single source of truth (app descriptor, HomeKit Firmware
 # Revision and the fupdateota version check all read this value).
 CONFIG_APP_PROJECT_VER_FROM_CONFIG=y
-CONFIG_APP_PROJECT_VER="0.1.6"
+CONFIG_APP_PROJECT_VER="0.1.7"
 
 # OTA (general-ota); server certificates come from the mbedTLS bundle below
 CONFIG_GENERAL_OTA_URL="https://raw.githubusercontent.com/AramVartanyan/otafw/master/mppt1hs2.bin"

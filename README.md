@@ -205,7 +205,7 @@ Phase 2 image: 1000 KB of the 1600 KB OTA slot (HomeKit SDK included).
 | Task | Priority | Period | Work |
 |---|---|---|---|
 | `mppt_task` | high (5) | bound by ADS1115 conversions, ~15 ms | Read_Sensors → Device_Protection → System_Processes → Charging_Algorithm |
-| `ui_task` | low (1) | 1 s LCD, log at configurable interval | LCD pages, menu state machine, telemetry line, HAP characteristic push (2 s, on change above thresholds) |
+| `ui_task` | low (1) | 1 s LCD, log at configurable interval | LCD pages, menu state machine, telemetry line, HAP state-change check (local, every 2 s; notifies only changed states) |
 | HAP / Wi-Fi tasks | SDK | | only when HAP is enabled |
 | buttons | `iot_button` callbacks | | short / long press events into `ui_task` queue |
 
@@ -244,7 +244,7 @@ Changed or fixed:
    REC) never count towards the latch.
 
 Kept with changes: `electricalPrice` / `energySavings` stay (default 0.27 EUR/kWh), but the
-price becomes a menu setting and the savings are shown on the LCD only, not in HomeKit.
+price becomes a menu setting (also writable from HomeKit) and the savings are shown on the LCD only, not in HomeKit.
 
 Dropped: Blynk telemetry, Bluetooth flag, dual-core task pinning, the Arduino `String`
 firmware info strings (replaced by `CONFIG_APP_PROJECT_VER`), the Light Sensor service of the
@@ -316,20 +316,20 @@ a setting separate from HAP for this status page.
 | Setting | Default | Range / values | Source |
 |---|---|---|---|
 | Charging enabled | on | on/off | menu, HomeKit Switch |
-| Output mode | Charger | Charger / PSU (regulated output voltage, battery optional) | menu, HomeKit custom |
-| MPPT algorithm | on | on = MPPT, off = CC-CV only | menu, HomeKit custom |
+| Output mode | Charger | Charger / PSU (regulated output voltage, battery optional) | menu |
+| MPPT algorithm | on | on = MPPT, off = CC-CV only | menu |
 | Battery preset | None | see 3.2; the user selects the type after first power-up | menu |
-| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–35 V (`vOutSystemMax`), 0.1 V step in the menu | menu, HomeKit custom |
-| Battery min voltage | 22.40 V (FUGU) | 0 V – battery max | menu, HomeKit custom |
-| Charging current | 15.0 A | 0–16 A (`currentOutAbsolute`, L8 rating) | menu, HomeKit custom |
-| Fan enabled | on | on/off | menu, HomeKit Fan |
+| Battery max voltage / Output voltage (PSU) | 27.30 V (FUGU) | 0–35 V (`vOutSystemMax`), 0.1 V step in the menu | menu |
+| Battery min voltage | 22.40 V (FUGU) | 0 V – battery max | menu |
+| Charging current | 15.0 A | 0–16 A (`currentOutAbsolute`, L8 rating) | menu |
+| Fan enabled | on | on/off | menu (HomeKit can only add a manual run, see 5) |
 | Fan on temperature | 60 °C | 0–100 °C | menu |
 | Shutdown temperature | 90 °C | 0–120 °C | menu |
 | Wi-Fi enabled | off | on/off; hidden in the menu while HAP is on (HAP keeps Wi-Fi on) | menu |
 | HAP (HomeKit) enabled | off | on/off, requires Wi-Fi (turns it on); change → confirm → reboot | menu |
-| LCD backlight | on | on/off | menu, HomeKit custom "Display" |
+| LCD backlight | on | on/off | menu |
 | LCD backlight sleep | 10 s (backlight off at start; the first key only lights it and does nothing else; stays on during a firmware download) | never / 10 s / 5 min / 1 h / 6 h / 12 h / 1 d / 3 d / 1 w / 1 mo | menu |
-| Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu |
+| Energy price | 0.27 EUR/kWh | 0–9.99, 0.01 step; used for the savings figure on the LCD | menu, HomeKit custom |
 | Telemetry counter auto-reset | never | never / day / week / month / year | menu |
 | Serial telemetry mode | 1 (all) | 0 off, 1 all, 2 essential, 3 numbers | menu |
 | Wh, kWh, run time | 0 | persisted counters, see 3.4 | automatic |
@@ -399,7 +399,7 @@ one step, hold auto-repeat.
   `PWM_MaxDC` 97 %, `efficiencyRate` 1.0.
 - PWM: frequency 39 kHz, resolution 11 bit (LEDC low-speed mode), P&O step 1.
 - NTC: R25, B, R_fixed, Vdd, circuit mode, TH2 ADC channel.
-- Timing: routine interval 250 ms, LCD interval 1 s, HAP push interval 2 s, error window 1 s,
+- Timing: routine interval 250 ms, LCD interval 1 s, HAP state-change check 2 s, error window 1 s,
   error count limit 5, menu timeout 7 s, Wh persist interval.
 - HomeKit: manufacturer, model, hardware revision, setup code (test builds only), name pattern.
 - Console: USB CDC on the mini-USB port (default; flashing and monitor work through it), or UART0 on T6 selected in menuconfig. The ESP32-S2 has one console, not both.
@@ -474,21 +474,55 @@ namespaces instead.
 
 ## 5. HomeKit model
 
-One accessory (category Switch), enabled only when the "HAP enabled" setting is on.
+One accessory (category Outlet), enabled only when the "HAP enabled" setting is on. The
+Apple Home app shows only standard services; the two custom characteristics are visible in
+Eve, Controller for HomeKit or Home+. Settings are made from the LCD menu, before the
+hardware is connected, and are not changed over HomeKit (apart from the energy price).
 
-| Service | Characteristics | Source |
+| Service | Characteristics | Notes |
 |---|---|---|
-| Accessory Information | name `MPPT-xxxxxx`, manufacturer, model, serial = Wi-Fi MAC, firmware = `CONFIG_APP_PROJECT_VER`, hardware = 1.1 | Kconfig |
-| Switch "Charger" | On = charging enabled | `chargingPause` inverted |
-| ↳ custom (existing) | Display (LCD backlight) | existing template; the OTA trigger/status characteristics are dropped, OTA is driven from the LCD menu |
-| ↳ custom (writable) | Output Mode, MPPT Mode, Battery Max V, Battery Min V, Charging Current | menu settings |
-| ↳ custom (read-only, later) | Vin, Iin, Vout, Iout, PWM, error bitmask, Wh (Eve UUIDs for Eve app history) | deferred |
-| Battery Service | Battery Level = SOC %, Charging State = charging / not charging / not chargeable (PSU or preset "None"), Status Low Battery (< 10 %) | Blynk LED1–3 |
-| Temperature Sensor | Current Temperature = TH1, Status Fault = OTE | display page 4 |
-| Fan v1 | On = fan running; write = fan override | System_Processes |
+| Accessory Information | name `MPPT-xxxxxx`, manufacturer `Armo Ltd.`, model `MPPT32`, serial = Wi-Fi MAC, firmware = `CONFIG_APP_PROJECT_VER`, hardware `1.1` | Kconfig |
+| Outlet "Output" (primary) | **On** = output enabled (Off → soft stop in PSU mode, see 3.2); **Outlet In Use** = the output delivers current (I_out above about 0.2 A) | allows automations such as switching the output off at night |
+| ↳ Eve Total Consumption (custom, read) | energy in kWh (`E863F10C`) | sent **only when a controller reads it**, never as a notification |
+| ↳ Energy price (custom, read/write) | EUR/kWh, same range as the menu (0–9.99) | faster to type on a phone than to step through in the menu |
+| Temperature Sensor | Current Temperature = TH1, sent only when a controller reads it; **Status Fault** on over-temperature or a failed sensor (notified) | |
+| Fan | **Active** (read/write), see below | the local control always has priority |
+| Battery Service | Battery Level, Charging State, Status Low Battery | present in every mode, so a mode change never needs removing and re-pairing the accessory |
 
-With battery preset "None" the Battery service reports **100 %** and "not chargeable", so the
-Home app does not raise low-battery warnings.
+Battery Service by mode:
+
+- Charger mode with a battery preset: Battery Level = SOC %; Charging State = charging while
+  the power stage runs, not charging otherwise (no sun, fault, output off); Status Low
+  Battery below 10 %.
+- PSU mode (or preset "None"): Battery Level = 100 %; Charging State = charging while the
+  power stage runs, not charging without sun; Status Low Battery never set.
+
+Fan (life support of the device, the local temperature control always wins):
+
+- The fan runs when the temperature control wants it on (fan-on temperature, over-temperature)
+  or when HomeKit switched it on.
+- HomeKit can switch the fan on and off only while the temperature control has it off. A
+  HomeKit On lasts until HomeKit Off or a reboot.
+- If the temperature reaches the fan-on threshold, the temperature control takes over and
+  clears the HomeKit On. When the temperature falls back, the fan stops as the settings say,
+  and Active = Off is sent to HomeKit.
+- A HomeKit Off while the temperature control has the fan on is answered with success (HAP
+  expects an immediate answer), the fan keeps running, and Active = On is sent back about
+  1 s later.
+
+HomeKit starts on the first Wi-Fi connection after boot, once the setup portal is closed,
+so the portal and the HAP server never share port 80. The setup code comes from
+`factory_nvs`; `CONFIG_USE_HARDCODED_SETUP_CODE` is for test builds only. The fan output is
+`fan_auto_on || fan_hap_on` in `mppt_control`; `fan_auto_on` (temperature with hysteresis)
+follows in phase 3, step 1.
+
+Dropped from the earlier template: the Switch "Charger", the Display (LCD backlight) custom
+characteristic, and custom characteristics for settings (output voltage, current, mode, MPPT).
+Nothing is sent periodically. Measured values (energy, temperature, battery level) are
+answered only when a controller reads them. Notifications go out only when a state changes:
+output on/off, outlet in use, temperature fault, fan, charging state, low battery, energy
+price. Outlet In Use and the charging state follow the sun, so their change is notified only
+after it has held for 10 s.
 
 HAP pairing reset: IO0 held 3 s resets Wi-Fi credentials, 10 s resets to factory; both also
 available from the Device Setup menu, and factory reset also via MENU held 10 s.
@@ -575,8 +609,9 @@ Each phase is reviewed and approved before the next starts.
    7. Battery charging (CC-CV), only once a battery is used.
    8. PSU mode from panels: clouds, load steps, sunset ramp-down and recovery. The most
       testing and debugging.
-4. **Connectivity** — `captive-wifi` component, Device Setup menu, OTA check; then
-   `mppt_hap` and replacement of the template callbacks.
+4. **Connectivity** — `captive-wifi` component with the setup portal, Device Setup menu, OTA
+   (done, tested on the hardware); `mppt_hap` with the accessory of section 5 (written,
+   hardware test pending).
 5. **Extras** — web status page on the device IP, TH2 redundancy, Wh persistence tuning, Eve
    characteristics.
 

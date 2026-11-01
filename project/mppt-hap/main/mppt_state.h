@@ -58,7 +58,10 @@ typedef struct {
     int  pwm_max_limited;
     bool buck_enabled;
     bool backflow_enabled;
-    bool fan_on;
+    bool fan_on;            /* fan output: fan_auto_on || fan_hap_on */
+    bool fan_auto_on;       /* the temperature control wants the fan */
+    bool fan_hap_on;        /* switched on from HomeKit (cleared when the
+                               temperature control takes over) */
     bool pwr12_good;
     uint16_t faults;        /* MPPT_FAULT_* */
     int  err_now;           /* faults in this cycle (FUGU ERR) */

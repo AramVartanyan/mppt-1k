@@ -16,7 +16,9 @@ extern "C" {
  * accessory name, `serial` the Wi-Fi MAC string. */
 esp_err_t mppt_hap_start(const char *name, const char *serial);
 
-/* Push changed values to paired controllers (called from the UI task). */
+/* Check for state changes and notify only those (called from the UI task;
+ * the check is local, nothing is sent while nothing changes). Measured
+ * values are answered on read and never notified. */
 void mppt_hap_push(void);
 
 bool mppt_hap_is_running(void);

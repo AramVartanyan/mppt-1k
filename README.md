@@ -205,7 +205,7 @@ Phase 2 image: 1000 KB of the 1600 KB OTA slot (HomeKit SDK included).
 | Task | Priority | Period | Work |
 |---|---|---|---|
 | `mppt_task` | high (5) | bound by ADS1115 conversions, ~15 ms | Read_Sensors → Device_Protection → System_Processes → Charging_Algorithm |
-| `ui_task` | low (1) | 1 s LCD, log at configurable interval | LCD pages, menu state machine, telemetry line, HAP characteristic push (2 s, on change above thresholds) |
+| `ui_task` | low (1) | 1 s LCD, log at configurable interval | LCD pages, menu state machine, telemetry line, HAP state-change check (local, every 2 s; notifies only changed states) |
 | HAP / Wi-Fi tasks | SDK | | only when HAP is enabled |
 | buttons | `iot_button` callbacks | | short / long press events into `ui_task` queue |
 
@@ -399,7 +399,7 @@ one step, hold auto-repeat.
   `PWM_MaxDC` 97 %, `efficiencyRate` 1.0.
 - PWM: frequency 39 kHz, resolution 11 bit (LEDC low-speed mode), P&O step 1.
 - NTC: R25, B, R_fixed, Vdd, circuit mode, TH2 ADC channel.
-- Timing: routine interval 250 ms, LCD interval 1 s, HAP push interval 2 s, error window 1 s,
+- Timing: routine interval 250 ms, LCD interval 1 s, HAP state-change check 2 s, error window 1 s,
   error count limit 5, menu timeout 7 s, Wh persist interval.
 - HomeKit: manufacturer, model, hardware revision, setup code (test builds only), name pattern.
 - Console: USB CDC on the mini-USB port (default; flashing and monitor work through it), or UART0 on T6 selected in menuconfig. The ESP32-S2 has one console, not both.
@@ -485,7 +485,7 @@ hardware is connected, and are not changed over HomeKit (apart from the energy p
 | Outlet "Output" (primary) | **On** = output enabled (Off → soft stop in PSU mode, see 3.2); **Outlet In Use** = the output delivers current (I_out above about 0.2 A) | allows automations such as switching the output off at night |
 | ↳ Eve Total Consumption (custom, read) | energy in kWh (`E863F10C`) | sent **only when a controller reads it**, never as a notification |
 | ↳ Energy price (custom, read/write) | EUR/kWh, same range as the menu (0–9.99) | faster to type on a phone than to step through in the menu |
-| Temperature Sensor | Current Temperature = TH1; **Status Fault** on over-temperature or a failed sensor | |
+| Temperature Sensor | Current Temperature = TH1, sent only when a controller reads it; **Status Fault** on over-temperature or a failed sensor (notified) | |
 | Fan | **Active** (read/write), see below | the local control always has priority |
 | Battery Service | Battery Level, Charging State, Status Low Battery | present in every mode, so a mode change never needs removing and re-pairing the accessory |
 
@@ -518,7 +518,11 @@ follows in phase 3, step 1.
 
 Dropped from the earlier template: the Switch "Charger", the Display (LCD backlight) custom
 characteristic, and custom characteristics for settings (output voltage, current, mode, MPPT).
-Notifications are pushed at most every 2 s and only on changes above a threshold.
+Nothing is sent periodically. Measured values (energy, temperature, battery level) are
+answered only when a controller reads them. Notifications go out only when a state changes:
+output on/off, outlet in use, temperature fault, fan, charging state, low battery, energy
+price. Outlet In Use and the charging state follow the sun, so their change is notified only
+after it has held for 10 s.
 
 HAP pairing reset: IO0 held 3 s resets Wi-Fi credentials, 10 s resets to factory; both also
 available from the Device Setup menu, and factory reset also via MENU held 10 s.

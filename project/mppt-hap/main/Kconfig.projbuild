@@ -448,7 +448,7 @@ menu "MPPT Solar Charger (MPPT32 v1.1)"
             default 1000
 
         config MPPT_HAP_PUSH_INTERVAL_MS
-            int "HomeKit characteristic push (ms)"
+            int "HomeKit state-change check interval (ms, local; only changes are sent)"
             default 2000
 
         config MPPT_ERROR_WINDOW_MS

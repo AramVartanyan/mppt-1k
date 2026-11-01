@@ -8,6 +8,11 @@
  *   Temperature Sensor   TH1, Status Fault on over-temperature / no reading
  *   Fan v2               Active; the local temperature control has priority
  *   Battery Service      present in every mode (100 % in PSU mode)
+ *
+ * Measured values (energy, temperature, battery level) are only answered
+ * when a controller reads them and are never notified. Notifications go out
+ * only when a state changes: output on/off, in use, temperature fault, fan,
+ * charging state, low battery, energy price.
  */
 #include <string.h>
 #include <math.h>
@@ -33,8 +38,9 @@ static const char *TAG = "mppt_hap";
 
 #define IN_USE_ON_A         0.25f   /* Outlet In Use with hysteresis */
 #define IN_USE_OFF_A        0.15f
-#define TEMP_STEP_C         0.2f    /* notify on changes of at least this */
 #define FAN_REVERT_US       (1000 * 1000)
+#define SETTLE_US           (10LL * 1000 * 1000)  /* a flapping state is notified
+                                                     only after it held this long */
 
 static bool s_running;
 
@@ -47,8 +53,8 @@ static esp_timer_handle_t s_fan_revert;
 /* last values sent, to notify only on changes */
 static struct {
     bool    on, in_use;
-    float   temp, price;
-    uint8_t temp_fault, fan, level, charging, low;
+    float   price;
+    uint8_t temp_fault, fan, charging, low;
 } s_last;
 
 /* ----------------------------------------------------------------- helpers */
@@ -62,6 +68,29 @@ static void set_bool(hap_char_t *hc, bool *last, bool v)
     }
 }
 
+/* For states that follow the sun (in use, charging): notify a change only
+ * after it has held for SETTLE_US, so clouds do not flood the controllers. */
+typedef struct {
+    bool    pending;
+    int64_t since;
+} settle_t;
+
+static bool settled(settle_t *s, bool changed)
+{
+    if (!changed) {
+        s->pending = false;
+        return false;
+    }
+    int64_t now = esp_timer_get_time();
+    if (!s->pending) {
+        s->pending = true;
+        s->since = now;
+    }
+    return now - s->since >= SETTLE_US;
+}
+
+static settle_t s_in_use_settle, s_charging_settle;
+
 static void set_u8(hap_char_t *hc, uint8_t *last, uint8_t v)
 {
     if (*last != v) {
@@ -74,6 +103,49 @@ static void set_u8(hap_char_t *hc, uint8_t *last, uint8_t v)
 static bool battery_mode(const mppt_settings_t *cfg)
 {
     return cfg->output_mode_charger && cfg->preset != MPPT_BATT_NONE;
+}
+
+static uint8_t battery_level(const mppt_settings_t *cfg, const mppt_state_t *st)
+{
+    if (!battery_mode(cfg)) {
+        return 100;
+    }
+    int soc = st->soc_percent;
+    return (uint8_t)(soc < 0 ? 0 : soc > 100 ? 100 : soc);
+}
+
+/* ------------------------------------------- values read on request only */
+
+static int temp_read(hap_char_t *hc, hap_status_t *status, void *serv_priv, void *read_priv)
+{
+    (void)serv_priv;
+    (void)read_priv;
+    if (hc == c_temp) {
+        mppt_state_t st;
+        mppt_state_snapshot(&st);
+        if (!isnan(st.temp_c)) {         /* no reading: keep the last value, Status Fault is set */
+            hap_val_t val = { .f = st.temp_c };
+            hap_char_update_val(hc, &val);
+        }
+    }
+    *status = HAP_STATUS_SUCCESS;
+    return HAP_SUCCESS;
+}
+
+static int batt_read(hap_char_t *hc, hap_status_t *status, void *serv_priv, void *read_priv)
+{
+    (void)serv_priv;
+    (void)read_priv;
+    if (hc == c_batt_level) {
+        mppt_settings_t cfg;
+        mppt_settings_get(&cfg);
+        mppt_state_t st;
+        mppt_state_snapshot(&st);
+        hap_val_t val = { .u = battery_level(&cfg, &st) };
+        hap_char_update_val(hc, &val);
+    }
+    *status = HAP_STATUS_SUCCESS;
+    return HAP_SUCCESS;
 }
 
 /* ------------------------------------------------------------------ Outlet */
@@ -253,6 +325,7 @@ esp_err_t mppt_hap_start(const char *name, const char *serial)
     hap_char_float_set_constraints(c_temp, -40.0f, 125.0f, 0.1f);
     c_temp_fault = hap_char_status_fault_create(0);
     hap_serv_add_char(temp, c_temp_fault);
+    hap_serv_set_read_cb(temp, temp_read);
     hap_acc_add_serv(acc, temp);
 
     /* Fan */
@@ -263,11 +336,12 @@ esp_err_t mppt_hap_start(const char *name, const char *serial)
     hap_acc_add_serv(acc, fan);
 
     /* Battery, in every mode */
-    hap_serv_t *batt = hap_serv_battery_service_create(100, 0, 0);
+    hap_serv_t *batt = hap_serv_battery_service_create(battery_level(&cfg, &st), 0, 0);
     hap_serv_add_char(batt, hap_char_name_create("Battery"));
     c_batt_level = hap_serv_get_char_by_uuid(batt, HAP_CHAR_UUID_BATTERY_LEVEL);
     c_batt_charging = hap_serv_get_char_by_uuid(batt, HAP_CHAR_UUID_CHARGING_STATE);
     c_batt_low = hap_serv_get_char_by_uuid(batt, HAP_CHAR_UUID_STATUS_LOW_BATTERY);
+    hap_serv_set_read_cb(batt, batt_read);
     hap_acc_add_serv(acc, batt);
 
     hap_add_accessory(acc);
@@ -286,13 +360,12 @@ esp_err_t mppt_hap_start(const char *name, const char *serial)
         ESP_LOGE(TAG, "hap_start failed");
         return ESP_FAIL;
     }
-    /* values the characteristics were created with; 0xFF / NAN make the
-     * first push send the rest */
+    /* values the characteristics were created with; 0xFF makes the first
+     * check send the rest */
     s_last.on = cfg.charging_enabled;
     s_last.in_use = false;
     s_last.price = cfg.energy_price;
-    s_last.temp = NAN;
-    s_last.temp_fault = s_last.fan = s_last.level = s_last.charging = s_last.low = 0xFF;
+    s_last.temp_fault = s_last.fan = s_last.charging = s_last.low = 0xFF;
     s_running = true;
     mppt_state_lock();
     mppt_state_get()->hap_running = true;
@@ -315,31 +388,29 @@ void mppt_hap_push(void)
     /* Outlet */
     set_bool(c_on, &s_last.on, cfg.charging_enabled);
     bool in_use = s_last.in_use ? st.i_out > IN_USE_OFF_A : st.i_out > IN_USE_ON_A;
-    set_bool(c_in_use, &s_last.in_use, in_use);
+    if (settled(&s_in_use_settle, in_use != s_last.in_use)) {
+        set_bool(c_in_use, &s_last.in_use, in_use);
+    }
     if (fabsf(cfg.energy_price - s_last.price) >= 0.005f) {
         hap_val_t val = { .f = cfg.energy_price };
         hap_char_update_val(c_price, &val);
         s_last.price = cfg.energy_price;
     }
 
-    /* Temperature */
+    /* Temperature: the value is read on request; only the fault is notified */
     bool no_temp = isnan(st.temp_c);
-    if (!no_temp && !(fabsf(st.temp_c - s_last.temp) < TEMP_STEP_C)) {
-        hap_val_t val = { .f = st.temp_c };
-        hap_char_update_val(c_temp, &val);
-        s_last.temp = st.temp_c;
-    }
     set_u8(c_temp_fault, &s_last.temp_fault, (no_temp || (st.faults & MPPT_FAULT_OTE)) ? 1 : 0);
 
     /* Fan (real state; a reverted HomeKit Off is handled by the timer) */
     set_u8(c_fan, &s_last.fan, st.fan_on ? 1 : 0);
 
-    /* Battery */
-    bool batt = battery_mode(&cfg);
-    uint8_t level = batt ? (uint8_t)(st.soc_percent < 0 ? 0 : st.soc_percent > 100 ? 100 : st.soc_percent) : 100;
-    set_u8(c_batt_level, &s_last.level, level);
-    set_u8(c_batt_charging, &s_last.charging, st.buck_enabled ? 1 : 0);
-    set_u8(c_batt_low, &s_last.low, (batt && level < 10) ? 1 : 0);
+    /* Battery: the level is read on request; charging and low are notified */
+    uint8_t level = battery_level(&cfg, &st);
+    uint8_t charging = st.buck_enabled ? 1 : 0;
+    if (s_last.charging == 0xFF || settled(&s_charging_settle, charging != s_last.charging)) {
+        set_u8(c_batt_charging, &s_last.charging, charging);
+    }
+    set_u8(c_batt_low, &s_last.low, (battery_mode(&cfg) && level < 10) ? 1 : 0);
 }
 
 bool mppt_hap_is_running(void)

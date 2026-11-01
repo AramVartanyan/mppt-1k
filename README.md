@@ -510,6 +510,12 @@ Fan (life support of the device, the local temperature control always wins):
   expects an immediate answer), the fan keeps running, and Active = On is sent back about
   1 s later.
 
+HomeKit starts on the first Wi-Fi connection after boot, once the setup portal is closed,
+so the portal and the HAP server never share port 80. The setup code comes from
+`factory_nvs`; `CONFIG_USE_HARDCODED_SETUP_CODE` is for test builds only. The fan output is
+`fan_auto_on || fan_hap_on` in `mppt_control`; `fan_auto_on` (temperature with hysteresis)
+follows in phase 3, step 1.
+
 Dropped from the earlier template: the Switch "Charger", the Display (LCD backlight) custom
 characteristic, and custom characteristics for settings (output voltage, current, mode, MPPT).
 Notifications are pushed at most every 2 s and only on changes above a threshold.
@@ -599,8 +605,9 @@ Each phase is reviewed and approved before the next starts.
    7. Battery charging (CC-CV), only once a battery is used.
    8. PSU mode from panels: clouds, load steps, sunset ramp-down and recovery. The most
       testing and debugging.
-4. **Connectivity** — `captive-wifi` component, Device Setup menu, OTA check; then
-   `mppt_hap` and replacement of the template callbacks.
+4. **Connectivity** — `captive-wifi` component with the setup portal, Device Setup menu, OTA
+   (done, tested on the hardware); `mppt_hap` with the accessory of section 5 (written,
+   hardware test pending).
 5. **Extras** — web status page on the device IP, TH2 redundancy, Wh persistence tuning, Eve
    characteristics.
 

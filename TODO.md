@@ -62,6 +62,8 @@ once done.
   stop (README 3.2, "Stopping the power stage"). Also: output over-voltage trips at `vOutSystemMax` itself, not only
   at battery max + threshold; repeated faults latch until confirmed on the LCD
   (README 2.5, item 8).
-- Phase 4: captive portal and HomeKit accessory; test the fan HomeKit service.
+- Phase 4: test the HomeKit accessory on the hardware (pairing, Outlet,
+  energy read in Eve, energy price, temperature, fan rules, battery). Watch the
+  free heap with HAP, Wi-Fi and an OTA download together on the ESP32-S2.
 - OTA: next, before phase 3 (flashing over USB works, but updates in the
   enclosure should not need a cable).

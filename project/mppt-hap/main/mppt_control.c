@@ -32,10 +32,34 @@ static void protection(const mppt_settings_t *cfg)
     (void)cfg;
 }
 
+/* Fan output. The local temperature control has priority: when it wants
+ * the fan it takes over and clears a HomeKit On, so the fan stops as the
+ * settings say once the temperature falls again. */
+static void fan_output(void)
+{
+    static bool s_fan_out, s_auto_prev, s_first = true;
+    mppt_state_lock();
+    mppt_state_t *st = mppt_state_get();
+    if (st->fan_auto_on && !s_auto_prev) {
+        st->fan_hap_on = false;
+    }
+    s_auto_prev = st->fan_auto_on;
+    bool on = st->fan_auto_on || st->fan_hap_on;
+    st->fan_on = on;
+    mppt_state_unlock();
+    if (on != s_fan_out || s_first) {
+        mppt_hal_fan(on);
+        s_fan_out = on;
+        s_first = false;
+    }
+}
+
 static void system_processes(const mppt_settings_t *cfg)
 {
-    /* TODO(phase 3): fan control, loop time, auto counter reset. */
+    /* TODO(phase 3): fan_auto_on from the temperature (with hysteresis),
+     * loop time, auto counter reset. */
     (void)cfg;
+    fan_output();
 }
 
 static void charging(const mppt_settings_t *cfg)

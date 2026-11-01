@@ -46,6 +46,8 @@ static char s_serial[16];
 static esp_timer_handle_t s_ota_timer;
 static bool s_ota_checked;
 static bool s_portal_used;          /* setup portal ran since boot */
+static bool s_hap_wanted;           /* HAP enabled in the settings */
+static bool s_hap_started;
 
 /* Wi-Fi connection status → LED base level and shared state
  * (kept as a plain function so HomeKit-side code can call it too). */
@@ -119,6 +121,18 @@ static void ota_timer_cb(void *arg)
 
 /* ------------------------------------------------------------------ Wi-Fi */
 
+/* HomeKit starts once, on the first Wi-Fi connection: the setup portal is
+ * down by then (captive-wifi sends PORTAL_STOPPED before STA_CONNECTED), so
+ * the two web servers never share port 80. */
+static void hap_start_task(void *arg)
+{
+    (void)arg;
+    if (mppt_hap_start(s_name, s_serial) != ESP_OK) {
+        ESP_LOGW(TAG, "HomeKit not started");
+    }
+    vTaskDelete(NULL);
+}
+
 static void wifi_event(captive_wifi_event_t evt, void *ctx)
 {
     (void)ctx;
@@ -130,6 +144,12 @@ static void wifi_event(captive_wifi_event_t evt, void *ctx)
             captive_wifi_get_ip(ip, sizeof(ip));
             mppt_ui_message("WiFi connected", ip, 5000);
             s_portal_used = false;
+        }
+        if (s_hap_wanted && !s_hap_started) {
+            s_hap_started = true;
+            if (xTaskCreate(hap_start_task, "hap_start", 6144, NULL, 4, NULL) != pdPASS) {
+                ESP_LOGW(TAG, "HomeKit start task not created");
+            }
         }
         if (MPPT_OTA_AUTOCHECK_S > 0 && !s_ota_checked && s_ota_timer) {
             esp_timer_stop(s_ota_timer);
@@ -250,14 +270,8 @@ void app_main(void)
     /* 5. connectivity */
     if (cfg.wifi_enabled) {
         ESP_ERROR_CHECK(captive_wifi_init(s_name, wifi_event, NULL));
+        s_hap_wanted = cfg.hap_enabled;     /* started on the first connection */
         captive_wifi_start();
-        /* TODO(phase 4): start HomeKit on CAPTIVE_WIFI_EVT_STA_CONNECTED instead,
-         * never while the setup portal runs: both serve port 80. */
-        if (cfg.hap_enabled) {
-            if (mppt_hap_start(s_name, s_serial) != ESP_OK) {
-                ESP_LOGW(TAG, "HomeKit not started");
-            }
-        }
     } else {
         ESP_LOGI(TAG, "Wi-Fi disabled in settings");
     }

@@ -600,10 +600,25 @@ static void item_activate(item_id_t id)
 
 /* -------------------------------------------------------------- handling */
 
+/* Is the backlight allowed at all? The saved setting decides, except while
+ * the Backlight item itself is being edited: then the edited value shows as
+ * a preview. All backlight decisions use this one answer; mixing the edited
+ * copy (keys) with the saved setting (timer) let the timer switch the light
+ * off after every key, and every key was then taken as a wake-up only. */
+static bool backlight_allowed(void)
+{
+    if (s_mode == UI_EDIT && s_edit_item == IT_BACKLIGHT) {
+        return s_edit.lcd_backlight;
+    }
+    mppt_settings_t cfg;
+    mppt_settings_get(&cfg);
+    return cfg.lcd_backlight;
+}
+
 static void backlight_wake(void)
 {
     s_backlight_key_us = esp_timer_get_time();
-    if (!s_backlight_on && s_edit.lcd_backlight) {
+    if (!s_backlight_on && backlight_allowed()) {
         mppt_hal_lcd_backlight(true);
         s_backlight_on = true;
     }
@@ -613,7 +628,7 @@ static void backlight_tick(void)
 {
     mppt_settings_t cfg;
     mppt_settings_get(&cfg);
-    if (!cfg.lcd_backlight) {
+    if (!backlight_allowed()) {
         if (s_backlight_on) { mppt_hal_lcd_backlight(false); s_backlight_on = false; }
         return;
     }
@@ -639,7 +654,7 @@ static void handle_button(mppt_button_event_t ev)
     s_last_key_us = esp_timer_get_time();
     /* a key that only lights the dark backlight does nothing else, so the
      * screen can be read first and a stray MENU press selects nothing */
-    bool was_dark = !s_backlight_on && s_edit.lcd_backlight;
+    bool was_dark = !s_backlight_on && backlight_allowed();
     backlight_wake();
 
     if (ev == MPPT_BTN_MENU_RESET) {
